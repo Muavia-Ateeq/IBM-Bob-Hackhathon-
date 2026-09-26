@@ -11,7 +11,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.adjudicator import SEVERITY_ORDER, adjudicate
-from app.checkers import authz, business, injection, secrets
+from app.checkers import authz, business, injection, prompt_injection, secrets
 from app.checkers.base import Checker, run_all
 from app.config import Settings, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
@@ -19,7 +19,7 @@ from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, writ
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
 
-CHECKER_MODULES = (secrets, authz, injection, business)
+CHECKER_MODULES = (secrets, authz, injection, prompt_injection, business)
 
 
 def _log(message: str) -> None:
