@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { fetchRuns, fetchPrVerdict, type PrVerdictResponse } from "./lib/api"
+import { ApprovalOverride, type Override } from "./components/ApprovalOverride"
 
 function verdictColor(verdict: string) {
   if (verdict === "PASS") return "#15803D"
@@ -32,6 +33,11 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [prVerdicts, setPrVerdicts] = useState<PrVerdictResponse[]>([])
   const [selected, setSelected] = useState<PrVerdictResponse | null>(null)
+  const [overrides, setOverrides] = useState<Record<string, Override>>({})
+
+  function handleOverride(pr: string, override: Override) {
+    setOverrides((prev) => ({ ...prev, [pr]: override }))
+  }
 
   useEffect(() => {
     async function load() {
@@ -117,6 +123,12 @@ function App() {
       {selected && (
         <div style={{ marginTop: "30px", borderTop: "2px solid #333", paddingTop: "20px" }}>
           <h2>Details: {selected.pr}</h2>
+          <ApprovalOverride
+            pr={selected.pr}
+            originalVerdict={selected.verdict}
+            override={overrides[selected.pr] ?? null}
+            onOverride={(ov) => handleOverride(selected.pr, ov)}
+          />
 
           <div
             style={{
