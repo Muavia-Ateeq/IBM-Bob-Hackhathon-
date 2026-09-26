@@ -35,16 +35,21 @@ without per-file approval once the batch is approved:
 
 | File | Purpose |
 |------|---------|
-| `AI_CONTEXT.md` | Constitution: identity, stack, architecture, tokens, rules, model strategy |
-| `PROJECT_ROADMAP.md` | This file |
-| `SYSTEM_LEDGER.md` | Memory: state, file history, issues, next actions |
-| `AGENTS.md` | Portable agent rules |
+| `docs/AI_CONTEXT.md` | Constitution: identity, stack, architecture, tokens, rules, model strategy |
+| `docs/PROJECT_ROADMAP.md` | This file |
+| `docs/SYSTEM_LEDGER.md` | Memory: state, file history, issues, next actions |
+| `docs/AGENTS.md` | Portable agent rules |
+| `AGENTS.md` | Root pointer to `docs/AGENTS.md`, so tools that load that filename from the repo root still find the rules |
+| `docs/WEDGE.md` | The positioning, the demo script, and the claims that can be falsified |
+| `docs/CONTRACT.md` | The HTTP surface the engine writes and the dashboard reads |
 | `.bob/rules/00-authenticity.md` | Bob-native: authenticity |
 | `.bob/rules/01-planning-governance.md` | Bob-native: tiered approval |
 | `.bob/rules/02-session-continuity.md` | Bob-native: boot / close-out |
 | `.bob/rules/03-scope-control.md` | Bob-native: active-phase discipline |
 | `.gitignore` | Python, Node, secrets, SARIF artifacts |
 | `README.md` | Human-facing; doubles as the lablab submission page |
+| `render.yaml` | Render blueprint — service name, build, start, health check, env vars |
+| `Procfile` | Same start command, for any Procfile-hosting platform |
 
 **Out of scope for Phase 0 — do not start early:**
 - Writing any application code
@@ -54,23 +59,30 @@ without per-file approval once the batch is approved:
 
 > ### ⚠️ Scope discrepancy — unresolved, Tier 3 (recorded 2026-09-25, widened twice)
 >
-> The boundaries above forbid application code. **`backend/app/**` nevertheless contains 13
+> The boundaries above forbid application code. **`backend/app/**` nevertheless contains 15
 > Python files** — schemas, the adjudicator, the checker base, three LLM checkers, one
 > deterministic checker, the config loader, the Groq client, the run log, and the entry point.
 >
 > The record cannot say whether a phase transition happened without this file being updated,
 > or whether the code landed outside approved scope. **This is deliberately left unresolved**,
 > because a phase transition is a Tier 3 decision and not an agent's to make. Tracked as **K10**
-> in `SYSTEM_LEDGER.md`; it is the first item in that file's Next Actions.
+> in `docs/SYSTEM_LEDGER.md`; it is the first item in that file's Next Actions.
 >
 > **The 🔴 ACTIVE marker is deliberately left on Phase 0.** A second session added 3
-> application files, one schema model, and 3 deploy configs under a user-approved batch. That
-> approval authorised the edits; it was not a phase transition, and moving this marker is not
-> an agent's call.
+> application files, one schema model, and 3 deploy configs under a user-approved batch. A
+> **third** session (2026-09-26) renamed `engine/` → `backend/`, moved this file and five
+> sibling docs into `docs/`, rewrote `render.yaml` and `Procfile`, and **deployed to Render**
+> — all under a plan the user approved. That approval authorised the edits; it was not a phase
+> transition, and moving this marker is not an agent's call.
 >
 > Consequence: **no phase status in this repository can be trusted until a human resolves it.**
 > Everything else in Phase 0 verified clean (26/26 checks, 2026-09-25). One Phase 0
 > deliverable, `README.md`, was corrected: its verdict table contradicted the code.
+>
+> **Note on the deliverables table above:** the governance files moved into `docs/` on
+> 2026-09-26, so their paths changed. This table is the Tier 1 manifest, and a manifest listing
+> a path that does not exist is a governance bug rather than a typo — which is why the new
+> paths are recorded here and not just in the ledger.
 
 **Exit criteria — all must hold:**
 1. All three governance files contain their required sections

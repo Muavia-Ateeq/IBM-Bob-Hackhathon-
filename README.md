@@ -14,6 +14,26 @@ online · September 25–27 2026
 > This README is written to be updated, not to look finished. Numbers appear here only
 > after they have been measured.
 
+## Live deployment
+
+**`https://trustgate-api-ehib.onrender.com`** — running on Render's Free plan, built from the
+`render.yaml` blueprint at the repo root.
+
+| Endpoint | Returns |
+|---|---|
+| `/api/health` | `{"ok":true}` |
+| `/api/runs` | every run record on disk — `{"count":0,...}` on a fresh deploy, because `runs/` is gitignored |
+| `/api/pr/{pr}/verdict` | one pull request's verdict |
+
+Two honest caveats, both in `docs/SYSTEM_LEDGER.md`:
+
+- The API is **read-only**. It surfaces run records; it does not create verdicts. Those come
+  from the engine CLI, which today runs in GitHub Actions on a pull request.
+- `GROQ_API_KEY` is `sync: false` in the blueprint, so it must be added by hand in the Render
+  dashboard. Without it, three of the four checkers degrade to `REVIEW`.
+- The Free plan spins down after ~15 minutes idle, so the first request after a pause can take
+  30–60 seconds. Open `/api/health` once before demoing.
+
 ## Setup in 8 commands
 
 ```bash
@@ -28,7 +48,7 @@ curl http://127.0.0.1:8000/api/health # {"ok":true}
 ```
 
 `backend/` has no `__init__.py` or `pyproject.toml`, so every command above runs from inside
-`backend/` — that is a known gap (`SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
+`backend/` — that is a known gap (`docs/SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
 
 ```bash
 python app/main.py --diff samples/example.diff --pr 42      # run the engine
@@ -112,7 +132,7 @@ posted as a PR comment, which would need either the `pull_request_target` RCE ab
 GitHub App with its own installation token. Neither exists. Losing the model's opinion is an
 acceptable price.
 
-**`REVIEW` does not hard-block.** `WEDGE.md` is explicit that a human decides on `REVIEW`. But
+**`REVIEW` does not hard-block.** `docs/WEDGE.md` is explicit that a human decides on `REVIEW`. But
 it is never silent: the full report is written to the job summary. If the team decides a
 degraded run should hold a merge, that is a one-line change in the last step.
 
@@ -209,10 +229,10 @@ in the ledger's Next Actions.
 | Dashboard | React · Vite · TypeScript | **not built** |
 | Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built**, never executed — the workflow has not been run on GitHub |
 | Secret scanner | Gitleaks (`secrets`) | **built**, unverified — the binary is present and works (`backend/.tools/gitleaks.exe`, v8.30.1) but is not on `PATH`; set `GITLEAKS_BIN` to its full path |
-| Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `SYSTEM_LEDGER.md` K13 |
+| Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `docs/SYSTEM_LEDGER.md` K13 |
 | Run log | `runs/*.json` + `app.runlog` | **built** |
 | Deploy config | `render.yaml` · `Procfile` · `vercel.json` | **written, never deployed** |
-| Data contract | `CONTRACT.md` | **built** — the schema the engine actually writes |
+| Data contract | `docs/CONTRACT.md` | **built** — the schema the engine actually writes |
 
 The model ID was verified against Groq's published strict-mode supported-model list. It has
 **not** been verified against a live completion, because no `GROQ_API_KEY` is present in this
@@ -220,7 +240,7 @@ environment — so the inference layer is written to spec and exercised only thr
 deterministic `StaticProvider` used in tests.
 
 Rationale for each choice, and the model/streaming/tool-use constraints that shape the
-checker design, are in [`AI_CONTEXT.md`](AI_CONTEXT.md).
+checker design, are in [`docs/AI_CONTEXT.md`](docs/AI_CONTEXT.md).
 
 ## Repository layout
 
@@ -255,7 +275,7 @@ mode this project exists to catch.
 | Missing | Consequence |
 |---|---|
 | **A real run of the gate** | `.github/workflows/trustgate.yml` and the SARIF converter are written and unit-tested, but the workflow has never executed on GitHub and the SARIF has never been accepted by Code Scanning. Everything about it is verified against the published schemas and action runtimes, not against a live run. |
-| **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `SYSTEM_LEDGER.md` K13. |
+| **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `docs/SYSTEM_LEDGER.md` K13. |
 | **React dashboard** | Verdict and evidence are terminal output, a PR comment, and the Code Scanning tab — nothing more. `vercel.json` exists but has nothing to build. |
 | **Labelled corpus** | The corpus and its runner are built (`demo_target/`, `bench/`), 9 of 10 fixtures planted. **No false-positive rate has been measured, and none is claimed** — the runner reports `INCOMPLETE` and prints no rate while K12 and K14 are open. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
 | **Determinism harness** | The same diff has not been run 20× to prove the verdict is stable. |
@@ -268,7 +288,7 @@ Gitleaks wrapper that has never run against a real binary. Without a `GROQ_API_K
 `gitleaks` binary, every run a reviewer can perform today degrades to `REVIEW` — **`BLOCK` and
 a clean `PASS` are not currently demonstrable**, and that is stated here rather than papered over.
 
-What *is* built and tested (76 tests, 8 files): the deterministic adjudicator, the fail-closed
+What *is* built and tested (81 tests, 8 files): the deterministic adjudicator, the fail-closed
 contract including its two closed bypasses, the schema-level evidence guarantees, the
 quote-must-exist-in-the-diff check, a run log that round-trips a verdict through disk, a SARIF
 converter validated against both the OASIS schema and GitHub's stricter requirements, and a
@@ -287,7 +307,7 @@ not publish fabricated numbers — see Rule 00 in [`.bob/rules/`](.bob/rules/00-
 
 Any AI agent can pick this project up cold:
 
-> Read `AI_CONTEXT.md`, `PROJECT_ROADMAP.md`, and `SYSTEM_LEDGER.md`. Confirm you
+> Read `docs/AI_CONTEXT.md`, `docs/PROJECT_ROADMAP.md`, and `docs/SYSTEM_LEDGER.md`. Confirm you
 > understand the architecture, the strict rules, and the active phase before we begin.
 
 The project is built by six people in 48 hours, and the governance files are maintained
@@ -297,7 +317,7 @@ in under two minutes.
 ## Team
 
 Six people, 48 hours. **These rows are unfilled on purpose** — no workstream has been claimed
-yet (`SYSTEM_LEDGER.md` K4), and a name written here that nobody owns would be a fabrication
+yet (`docs/SYSTEM_LEDGER.md` K4), and a name written here that nobody owns would be a fabrication
 in the one document judges read.
 
 | # | Member | Workstream | Focus |
@@ -310,7 +330,7 @@ in the one document judges read.
 | F | _unassigned_ | `demo_target/` + `bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12/K14** |
 
 Replace `_unassigned_` with real names before submitting. The workstream column is real: it is
-the Phase 3 split in `PROJECT_ROADMAP.md`, and two of the six are unstarted.
+the Phase 3 split in `docs/PROJECT_ROADMAP.md`, and two of the six are unstarted.
 
 ---
 

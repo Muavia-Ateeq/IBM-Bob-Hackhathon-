@@ -94,15 +94,23 @@ tab is what verifies it.
 
 ```
 /
-├── AI_CONTEXT.md              # This file — constitution
-├── PROJECT_ROADMAP.md         # Phases, one ACTIVE at a time
-├── SYSTEM_LEDGER.md           # Memory — state, file history, next actions
-├── AGENTS.md                  # Portable agent rules (all tools)
+├── AGENTS.md                  # Pointer to docs/AGENTS.md, so root-loading tools find the rules
+├── docs/                       # Governance — all of it, one directory
+│   ├── AI_CONTEXT.md           # This file — constitution
+│   ├── PROJECT_ROADMAP.md      # Phases, one ACTIVE at a time
+│   ├── SYSTEM_LEDGER.md        # Memory — state, file history, next actions
+│   ├── AGENTS.md               # Portable agent rules (all tools)
+│   ├── WEDGE.md                # Positioning, demo script, falsifiable claims
+│   └── CONTRACT.md             # The HTTP surface the engine writes
 ├── .bob/rules/                # Bob-native rules (IBM Bob IDE only)
 │   ├── 00-authenticity.md
 │   ├── 01-planning-governance.md
 │   ├── 02-session-continuity.md
 │   └── 03-scope-control.md
+├── render.yaml                 # Render blueprint — LIVE at trustgate-api-ehib.onrender.com
+├── Procfile                    # Same start command, for any Procfile host
+├── screenshots/               # Demo images — empty
+├── .github/workflows/trustgate.yml  # The gate — written, NEVER RUN (ledger K20)
 ├── backend/                    # Python/FastAPI verdict engine — BUILT
 │   ├── app/
 │   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
@@ -124,7 +132,7 @@ tab is what verifies it.
 │   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
 │   │   └── schemas.py         # Pydantic request/response contracts
 │   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
-│   ├── tests/                 # 79 passing across 8 files
+│   ├── tests/                 # 81 passing across 8 files
 │   ├── requirements.txt       # Pinned installed set
 │   └── pyproject.toml         — NOT BUILT
 ├── demo_target/               # Labelled corpus — BUILT, never run against a live checker
@@ -139,7 +147,7 @@ tab is what verifies it.
 │       ├── lib/               # API client, verdict token mapping
 │       └── types.ts           # Mirrors backend/app/schemas.py
 ├── .github/workflows/
-│   └── trustgate.yml          # The gate — BUILT, never executed on GitHub
+│   └── trustgate.yml          # The gate — BUILT, NEVER RUN: Actions API says 0 runs (K20)
 ├── render.yaml · Procfile · vercel.json   # Deploy config, written, never deployed
 └── README.md
 ```
