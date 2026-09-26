@@ -30,6 +30,11 @@ reliable and cheap.
 > **TrustGate is the only gate in the field that publishes what it checked, what it could
 > not check, and how often it was wrong.**
 
+> **State of the first two: built and tested.** The third is a commitment, not a claim —
+> see the note below. This document is a Phase 1 wedge, so it describes the product. Where
+> the product does not yet exist, that is said here rather than left for a reader to
+> discover.
+
 Concretely, three things — none of which the four overlapping live submissions show:
 
 1. **The `REVIEW`-on-failure contract.** A checker that crashes, times out, or returns
@@ -37,28 +42,45 @@ Concretely, three things — none of which the four overlapping live submissions
    checker failed and why. Every competing gate either fails open (dangerous) or fails
    closed into a hard block (annoying, and users disable it). TrustGate fails to the only
    state that is honest.
+   **Built and tested** — `engine/app/adjudicator.py` and `engine/tests/test_adjudicator.py`.
 2. **Evidence on every finding, mechanically enforced.** File, line, and quoted source,
    asserted by the schema — not a convention. A finding without evidence is a rejected
    finding. An LLM's opinion is not a security finding; an LLM's opinion *with the code it
    is pointing at* is.
+   **Built and tested** — `engine/app/schemas.py` rejects a finding with `line < 1`, empty
+   evidence, or a traversing `file` path. Asserted in the same test file.
 3. **A measured false-positive rate with the harness that reproduces it in the repo.** Not
    "high accuracy". A number, the corpus it came from, and the command that regenerates it.
+   **Not built.** `corpus/` does not exist, no corpus run has happened, and **no
+   false-positive rate has been measured or is claimed anywhere in this repository.** The
+   `Results` section of the README is deliberately empty for this reason. The number is
+   Phase 4 work, and it appears here with the harness that produced it, or not at all.
 
 The mechanism behind all three is the same: **separate what has a ground truth from what
 needs judgement, and never let the second kind silently stand in for the first.**
 
 ## The ninety-second demo
 
-1. Open a pull request that contains one planted SQL injection and one hardcoded API key.
-2. The gate runs. Wall-clock appears.
-3. Two findings appear inline on the diff, each with the quoted line. The key is caught by
-   Gitleaks; the injection by the semantic checker.
-4. The verdict reads `BLOCK`, and the reason names the critical finding.
-5. **Open a second PR while the Groq key is deliberately unset.** The verdict degrades to
-   `REVIEW`, not `PASS`, and the banner says which checker was unavailable.
+**This is the demo that runs today.** It is a terminal, not a pull request, because the
+GitHub gate is not built — see `README.md` → *Not built*.
 
-Step 5 is the demo. It is the part no competitor shows, and it is the part that proves the
+1. `python app/main.py --diff change.diff` with `GROQ_API_KEY` set. Wall-clock appears.
+2. Findings print, each with its file, line, and quoted source line.
+3. The verdict reads `PASS`, `REVIEW`, or `BLOCK`, and the reason names the finding that
+   decided it.
+4. **Re-run the identical command with the key unset.** All three checkers degrade. The
+   verdict reads `REVIEW` — never `PASS` — and the output names each unavailable checker
+   and why.
+5. **"Most gates print PASS here. This one refuses to, and tells you which of its own
+   checkers it could not run."**
+
+Step 4 is the demo. It is the part no competitor shows, and it is the part that proves the
 product is honest.
+
+> **Steps 1–3 as a real `BLOCK` are unverified.** No `GROQ_API_KEY` was available in the
+> environment where this was written, so the model call has never executed end to end. The
+> degradation path in step 4 *was* run and its output is in the session log. `UNVERIFIED —
+> one run of this command with a key set.`
 
 ## Anti-goals — what we are explicitly not building
 
@@ -70,7 +92,8 @@ product is honest.
   pure function. Do not blur these.
 - **Shadow-mode calibration.** Already shipped by a live competitor (quorum.reviews). We
   would be building their product. The honest version of this idea is "publish the
-  false-positive rate", which we do.
+  false-positive rate" — which is what wedge claim 3 commits to, and which this repository
+  has **not** done yet.
 - **Multi-language support beyond Python and Node.** The ecosystem CVE data and the scanner
   tooling are mature there. Depth beats breadth in 48 hours.
 - **i18n.** English only. Recorded in `AI_CONTEXT.md` so it reads as a decision.
@@ -89,11 +112,15 @@ Rule 00 forbids.
 
 ## Success, stated as tests
 
-| Claim | How it is falsified |
-|-------|--------------------|
-| Fails safe | Inject a fault into each of the 5 checkers. If any yields `PASS`, the claim is false |
-| Deterministic | Run the same diff 20×. If any verdict differs, the claim is false |
-| Evidence-complete | Emit findings. If any lacks file+line+quote, the claim is false |
-| Measurable | Run the corpus. If the false-positive rate cannot be computed, the claim is false |
+A row is only a claim if the test has actually been run. The state column is the point of
+this table — an unrun test is a promise, and this repository does not report promises as
+results.
+
+| Claim | How it is falsified | State |
+|-------|---------------------|-------|
+| Fails safe | Inject a fault into each checker. If any yields `PASS`, the claim is false | **Run for 3 of 3 checkers** — `test_degraded_error_never_yields_pass`, `test_degraded_timeout_never_yields_pass`. No fault-injection harness for the network path yet |
+| Deterministic | Run the same diff 20×. If any verdict differs, the claim is false | **Adjudicator only.** `test_adjudicator_is_pure` proves the verdict function is deterministic. The 20× run against the *model* has not happened — no API key |
+| Evidence-complete | Emit findings. If any lacks file+line+quote, the claim is false | **Run** — `line < 1`, empty evidence, and path traversal are all asserted to raise `ValidationError` |
+| Measurable | Run the corpus. If the false-positive rate cannot be computed, the claim is false | **Not run.** No corpus exists. No rate is claimed |
 
 Each row is a test that can fail, and a failing test means the README says so.
