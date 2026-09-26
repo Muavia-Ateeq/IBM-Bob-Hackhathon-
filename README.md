@@ -212,6 +212,7 @@ in the ledger's Next Actions.
 | Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `SYSTEM_LEDGER.md` K13 |
 | Run log | `runs/*.json` + `app.runlog` | **built** |
 | Deploy config | `render.yaml` · `Procfile` · `vercel.json` | **written, never deployed** |
+| Data contract | `CONTRACT.md` | **built** — the schema the engine actually writes |
 
 The model ID was verified against Groq's published strict-mode supported-model list. It has
 **not** been verified against a live completion, because no `GROQ_API_KEY` is present in this
@@ -239,7 +240,8 @@ checker design, are in [`AI_CONTEXT.md`](AI_CONTEXT.md).
 | `engine/requirements.txt` | The pinned installed set |
 | `.github/workflows/trustgate.yml` | The gate — runs the engine on every PR, uploads SARIF, fails the run on `BLOCK` |
 | `dashboard/` | React/Vite UI — **not built** |
-| `corpus/` | Labelled samples for measuring false positives — **not built** |
+| `demo_target/` | Labelled corpus, one planted defect per case — **built, never run against a live checker** |
+| `bench/` | Ground truth (`cases.json`) and the measurement runner — **built; reports `INCOMPLETE`** |
 
 ## Not built
 
@@ -252,10 +254,10 @@ mode this project exists to catch.
 | **A real run of the gate** | `.github/workflows/trustgate.yml` and the SARIF converter are written and unit-tested, but the workflow has never executed on GitHub and the SARIF has never been accepted by Code Scanning. Everything about it is verified against the published schemas and action runtimes, not against a live run. |
 | **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `SYSTEM_LEDGER.md` K13. |
 | **React dashboard** | Verdict and evidence are terminal output, a PR comment, and the Code Scanning tab — nothing more. `vercel.json` exists but has nothing to build. |
-| **Labelled corpus** | **No false-positive rate has been measured, and none is claimed.** |
+| **Labelled corpus** | The corpus and its runner are built (`demo_target/`, `bench/`), 9 of 10 fixtures planted. **No false-positive rate has been measured, and none is claimed** — the runner reports `INCOMPLETE` and prints no rate while K12 and K14 are open. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
 | **Determinism harness** | The same diff has not been run 20× to prove the verdict is stable. |
 | **A real scanner run** | `secrets` has run four times and produced nothing. Every run ended `FileNotFoundError` because `config.py` defaults to a bare `gitleaks` and the binary is not on `PATH`, so no secret has ever been detected by it. |
-| **A deployment** | `render.yaml`, `Procfile`, and `vercel.json` are written. Nothing has been deployed. The backend exposes two routes: `/api/health` and `/api/pr/{pr}/verdict`. |
+| **A deployment** | `render.yaml`, `Procfile`, and `vercel.json` are written. Nothing has been deployed. The backend exposes three routes: `/api/health`, `/api/pr/{pr}/verdict`, and `/api/runs`. |
 
 **The roster is 4 of 5, and none of the 4 has produced a real finding.** `authz`, `injection`,
 and `business` are LLM checkers that have never run against a live model; `secrets` is a
@@ -302,7 +304,7 @@ in the one document judges read.
 | C | _unassigned_ | `engine/app/adjudicator.py`, `schemas.py`, `tests/` | The verdict path and the proof |
 | D | _unassigned_ | `.github/workflows/`, `sarif.py` | The gate and the Code Scanning upload |
 | E | _unassigned_ | `dashboard/` | React/Vite UI — **not started** |
-| F | _unassigned_ | `corpus/` | Labelled samples and the evaluation harness — **not started** |
+| F | _unassigned_ | `demo_target/` + `bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12/K14** |
 
 Replace `_unassigned_` with real names before submitting. The workstream column is real: it is
 the Phase 3 split in `PROJECT_ROADMAP.md`, and two of the six are unstarted.

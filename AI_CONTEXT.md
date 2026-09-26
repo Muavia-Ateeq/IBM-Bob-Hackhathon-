@@ -124,10 +124,15 @@ tab is what verifies it.
 │   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
 │   │   └── schemas.py         # Pydantic request/response contracts
 │   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
-│   ├── tests/                 # 76 passing across 8 files
+│   ├── tests/                 # 79 passing across 8 files
 │   ├── requirements.txt       # Pinned installed set
-│   ├── corpus/                # Labelled vulnerable samples for FP measurement — NOT BUILT
 │   └── pyproject.toml         — NOT BUILT
+├── demo_target/               # Labelled corpus — BUILT, never run against a live checker
+│   ├── base/                  # The clean app every fixture is a one-defect copy of
+│   └── issue-NN-*/            # One planted defect each; 3 have no checker, 2 are disputed
+├── bench/                     # Ground truth + the measurement runner
+│   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
+│   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
 ├── dashboard/                 # React/Vite — NOT BUILT
 │   └── src/
 │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
@@ -139,12 +144,16 @@ tab is what verifies it.
 └── README.md
 ```
 
-`routes/` was planned and never built as a package. `build_app()` in `main.py` carries the two
-routes it needs — `/api/health` and `/api/pr/{pr}/verdict` — declared inline, because a
-package for two handlers is a directory with no reason to exist yet. There is no
+`routes/` was planned and never built as a package. `build_app()` in `main.py` carries the three
+routes it needs — `/api/health`, `/api/pr/{pr}/verdict`, and `/api/runs` — declared inline,
+because a package for three handlers is a directory with no reason to exist yet. There is no
 `POST /analyze` and no HTTP analysis entry point, so `schemas.AnalyzeRequest` is still
-referenced by nothing. The verdict route is a `def`, not an `async def`, so the run-log glob
-runs in Starlette's threadpool rather than blocking the event loop.
+referenced by nothing. The verdict and runs routes are `def`, not `async def`, so the run-log
+glob runs in Starlette's threadpool rather than blocking the event loop.
+
+`/api/runs` lists every run record on disk. It is unauthenticated and the app allows every
+origin, and a run record carries `Finding.evidence` verbatim — for the secrets checker, a
+fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.md`.
 
 ### The checker roster — five, deliberately heterogeneous
 

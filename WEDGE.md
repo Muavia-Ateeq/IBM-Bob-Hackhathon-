@@ -51,10 +51,13 @@ Concretely, three things — none of which the four overlapping live submissions
    evidence, or a traversing `file` path. Asserted in the same test file.
 3. **A measured false-positive rate with the harness that reproduces it in the repo.** Not
    "high accuracy". A number, the corpus it came from, and the command that regenerates it.
-   **Not built.** `corpus/` does not exist, no corpus run has happened, and **no
-   false-positive rate has been measured or is claimed anywhere in this repository.** The
-   `Results` section of the README is deliberately empty for this reason. The number is
-   Phase 4 work, and it appears here with the harness that produced it, or not at all.
+   **Harness built, number not yet produced.** `demo_target/` holds one planted defect per
+   case and `bench/` holds the ground truth and the runner; `python bench/run_benchmark.py`
+   regenerates the figure. It currently ends `INCOMPLETE` and prints no rate, because three
+   of four checkers need `GROQ_API_KEY` (K12) and the fourth needs the gitleaks binary
+   (K14). **No false-positive rate has been measured, and none is claimed anywhere in this
+   repository.** The `Results` section of the README is deliberately empty for this reason.
+   The number appears here with the harness that produced it, or not at all.
 
 The mechanism behind all three is the same: **separate what has a ground truth from what
 needs judgement, and never let the second kind silently stand in for the first.**
@@ -124,6 +127,6 @@ results.
 | Fails safe | Inject a fault into each checker. If any yields `PASS`, the claim is false | **Run for 3 of 3 checkers** — `test_degraded_error_never_yields_pass`, `test_degraded_timeout_never_yields_pass`. No fault-injection harness for the network path yet |
 | Deterministic | Run the same diff 20×. If any verdict differs, the claim is false | **Adjudicator only.** `test_adjudicator_is_pure` proves the verdict function is deterministic. The 20× run against the *model* has not happened — no API key |
 | Evidence-complete | Emit findings. If any lacks file+line+quote, the claim is false | **Run** — `line < 1`, empty evidence, and path traversal are all asserted to raise `ValidationError` |
-| Measurable | Run the corpus. If the false-positive rate cannot be computed, the claim is false | **Not run.** No corpus exists. No rate is claimed |
+| Measurable | Run the corpus. If the false-positive rate cannot be computed, the claim is false | **Not run.** The corpus now exists (`demo_target/` + `bench/`, 9 of 10 fixtures planted) and the runner reports `INCOMPLETE` with no rate, because K12 and K14 are both open. One key and one binary close it |
 
 Each row is a test that can fail, and a failing test means the README says so.

@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.runlog import compute_verdict, load_results, write_run_records
+from app.runlog import compute_verdict, load_all_records, load_results, write_run_records
 from app.schemas import CheckerResult, CheckerStatus, CheckerTier, Finding, Severity, Verdict
 
 
@@ -128,3 +128,21 @@ def test_only_the_newest_run_is_adjudicated(tmp_path: Path) -> None:
     write_run_records([result("authz"), result("injection"), result("business")], "repo#1", "r2", tmp_path)
     results, _unreadable, _digest = load_results(tmp_path, "repo#1")
     assert sorted(r.checker for r in results) == ["authz", "business", "injection"]
+
+
+def test_load_all_records_skips_a_corrupt_file_and_says_which(tmp_path: Path) -> None:
+    """`/api/runs` backs this. A corrupt file must be skipped, not fatal — but a silently
+    dropped record is a silently dropped finding, so the name is returned for reporting."""
+    write_run_records([result("authz"), result("injection")], "repo#1", "r1", tmp_path)
+    (tmp_path / "corrupt.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "wrongshape.json").write_text('{"run_id": "r9"}', encoding="utf-8")
+
+    records, unreadable = load_all_records(tmp_path)
+
+    assert sorted(record.result.checker for record in records) == ["authz", "injection"]
+    assert sorted(unreadable) == ["corrupt.json", "wrongshape.json"]
+
+
+def test_load_all_records_on_a_missing_directory_is_empty_not_an_error(tmp_path: Path) -> None:
+    records, unreadable = load_all_records(tmp_path / "nope")
+    assert (records, unreadable) == ([], [])

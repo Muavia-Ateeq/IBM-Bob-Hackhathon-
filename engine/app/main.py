@@ -15,7 +15,7 @@ from app.checkers import authz, business, injection, secrets
 from app.checkers.base import Checker, run_all
 from app.config import Settings, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
-from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, write_run_records
+from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, write_run_records
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
 
@@ -138,6 +138,22 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     @application.get("/api/health")
     async def health() -> dict[str, bool]:
         return {"ok": True}
+
+    # Every run record on disk, newest last. `def`, not `async def`, for the same reason as
+    # `pr_verdict` below: the glob and the file reads run in the threadpool.
+    #
+    # These records carry `Finding.evidence` verbatim, and for the secrets checker that is a
+    # matched credential fragment — which is why `runs/` is gitignored. This endpoint is
+    # unauthenticated and the app allows every origin, so a publicly deployed instance
+    # republishes those fragments. Demo-only until it is gated; see SYSTEM_LEDGER.md.
+    @application.get("/api/runs")
+    def runs() -> dict:
+        records, unreadable = load_all_records(runs_dir)
+        return {
+            "count": len(records),
+            "unreadable": unreadable,
+            "runs": [record.model_dump(mode="json") for record in records],
+        }
 
     # Declared `def`, not `async def`, so Starlette runs the glob and the file reads in its
     # threadpool. An `async def` here would block the event loop on every dashboard poll.

@@ -1,0 +1,117 @@
+{
+  "corpus": "TrustGate benchmark corpus",
+  "version": 1,
+  "base": "demo_target/base",
+  "line_tolerance": 5,
+  "notes": [
+    "Every case is demo_target/base with exactly ONE planted defect, so the generated diff is minimal and any finding outside the expectation below is a false positive by construction.",
+    "expected_checker is the checker whose FOCUS string the defect was assigned against by reading engine/app/checkers/*.py -- not by the case name. Where null, the ground truth is ZERO findings and any finding is a false positive.",
+    "disputed: true means the assignment is genuinely arguable between two checkers or between a checker and none. A miss on a disputed case is reported separately rather than counted as a plain false negative, because the corpus does not get to define correctness by its own preference.",
+    "line_tolerance: a model that points at a neighbouring line of the same statement is not a miss. Beyond the window it is.",
+    "This corpus cannot yet produce a precision or recall figure. Three of the four checkers need GROQ_API_KEY (K12) and the fourth needs the gitleaks binary (K14). bench/run_benchmark.py refuses to print a rate for any checker that did not run."
+  ],
+  "cases": [
+    {
+      "id": "issue-01-fake-package",
+      "title": "Typosquatted dependency (requsts, not requests)",
+      "expected_checker": null,
+      "expected_file": "requirements.txt",
+      "expected_line": 3,
+      "expected_severity": null,
+      "disputed": false,
+      "no_checker_reason": "Dependency verification is engine/app/checkers/deps.py, which is NOT BUILT and is blocked on K13 -- the OSV-Scanner JSON carries no line number. No checker in the roster owns a typosquatted package name."
+    },
+    {
+      "id": "issue-02-hardcoded-key",
+      "title": "Session signing key committed to source",
+      "expected_checker": "secrets",
+      "expected_file": "config.py",
+      "expected_line": 5,
+      "expected_severity": "high",
+      "disputed": false,
+      "rationale": "secrets is the roster's one deterministic checker (Gitleaks) and emits Severity.HIGH only, at checkers/secrets.py:91. It scans the --workspace tree, not the diff.",
+      "caveat": "UNVERIFIED: whether Gitleaks' default ruleset flags this specific high-entropy hex literal is confirmed only by executing the binary, which is K14. Until then this row is an expectation, not a measurement."
+    },
+    {
+      "id": "issue-03-sql-injection",
+      "title": "Search term concatenated into a SQL statement",
+      "expected_checker": "injection",
+      "expected_file": "app.py",
+      "expected_line": 100,
+      "expected_severity": "critical",
+      "disputed": false,
+      "rationale": "injection FOCUS (checkers/injection.py:7) names 'SQL, NoSQL, OS command and template injection' and warns 'A parameterised query is not SQL injection'. The base fixture is parameterised; this one is not."
+    },
+    {
+      "id": "issue-04-missing-auth",
+      "title": "find_order accepts user_id and never checks it (IDOR)",
+      "expected_checker": "authz",
+      "expected_file": "app.py",
+      "expected_line": 71,
+      "expected_severity": "high",
+      "disputed": false,
+      "rationale": "authz FOCUS (checkers/authz.py:7) names 'missing or incorrect authorization checks, IDOR where a resource is addressed by an id taken straight from the request'. The signature keeps user_id so the call site is unchanged, which is what makes the omission a real regression rather than a rewrite."
+    },
+    {
+      "id": "issue-05-unsafe-deserialize",
+      "title": "PLACEHOLDER -- fixture not yet planted",
+      "expected_checker": "injection",
+      "expected_file": "app.py",
+      "expected_line": null,
+      "expected_severity": "critical",
+      "disputed": false,
+      "rationale": "injection FOCUS names 'unsafe deserialization of untrusted data'.",
+      "caveat": "The defect itself has NOT been planted. Writing a reachable pickle.loads fixture was declined by the sandbox classifier as an RCE surface and needs an explicit human decision. Until it is planted, run_benchmark.py skips this case and says so rather than reporting a false negative."
+    },
+    {
+      "id": "issue-06-prompt-injection",
+      "title": "Untrusted profile notes concatenated into a model instruction",
+      "expected_checker": "injection",
+      "expected_file": "app.py",
+      "expected_line": 103,
+      "expected_severity": "medium",
+      "disputed": true,
+      "rationale": "Arguable. injection FOCUS says 'template injection' and a string-built prompt is a template, so injection can fairly claim it. No FOCUS string mentions prompt injection or instruction hierarchy at all, so 'no checker owns this' is an equally defensible reading. Recorded as disputed rather than silently resolved in either direction."
+    },
+    {
+      "id": "issue-07-license-violation",
+      "title": "GPL-3.0 vendored file with no source offer, inside an MIT project",
+      "expected_checker": null,
+      "expected_file": "vendor/legacy_checksum.py",
+      "expected_line": 1,
+      "expected_severity": null,
+      "disputed": false,
+      "no_checker_reason": "No FOCUS string in the roster mentions licensing, and a license checker was never in the design -- SYSTEM_LEDGER.md decline 10 records that it was specified in a pasted prompt and refused. A finding here is a false positive, not a discovery."
+    },
+    {
+      "id": "issue-08-no-rate-limit",
+      "title": "login docstring promises per-address throttling the body never performs",
+      "expected_checker": "business",
+      "expected_file": "app.py",
+      "expected_line": 45,
+      "expected_severity": "medium",
+      "disputed": true,
+      "rationale": "Arguable. business FOCUS (checkers/business.py:7) names 'missing validation on values that drive money, quota, or state transitions' and is described in sarif.py:58 as 'the code is syntactically safe and semantically wrong' -- which is exactly a docstring that lies about what the body does. authz can also fairly claim it as a missing control on an authentication flow."
+    },
+    {
+      "id": "issue-09-weak-hash",
+      "title": "PBKDF2-SHA256 replaced with unsalted MD5",
+      "expected_checker": "business",
+      "expected_file": "crypto.py",
+      "expected_line": 7,
+      "expected_severity": "high",
+      "disputed": false,
+      "rationale": "business FOCUS names 'incorrect cryptographic choices such as ECB mode, a fixed IV, or a hand-rolled comparison; secrets derived from a weak source'. The base uses PBKDF2-HMAC-SHA256 with a per-user salt and a constant-time compare, so the diff is unambiguous."
+    },
+    {
+      "id": "issue-10-debug-enabled",
+      "title": "Flask DEBUG left on, exposing the interactive console",
+      "expected_checker": "authz",
+      "expected_file": "app.py",
+      "expected_line": 102,
+      "expected_severity": "high",
+      "disputed": true,
+      "rationale": "Arguable. With DEBUG on, Flask serves the Werkzeug console, which is unauthenticated code execution -- authz FOCUS names 'authentication flows that can be bypassed'. business can equally claim it as a configuration invariant nobody enforced. Recorded as disputed."
+    }
+  ]
+}

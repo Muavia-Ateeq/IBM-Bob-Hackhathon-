@@ -32,6 +32,26 @@ def write_run_records(
     return paths
 
 
+def load_all_records(runs_dir: Path) -> tuple[list[RunRecord], list[str]]:
+    """Every valid record in ``runs_dir``, plus the names of the ones that would not parse.
+
+    Unreadable files are skipped rather than raised, mirroring `load_results`: one corrupt
+    file on disk must not take down the whole listing. The unreadable names are returned so
+    a caller can report them — a silently dropped record is a silently dropped finding.
+    """
+    if not runs_dir.is_dir():
+        return [], []
+
+    records: list[RunRecord] = []
+    unreadable: list[str] = []
+    for path in sorted(runs_dir.glob("*.json")):
+        try:
+            records.append(RunRecord.model_validate_json(path.read_bytes()))
+        except ValidationError:
+            unreadable.append(path.name)
+    return records, unreadable
+
+
 def load_results(runs_dir: Path, pr: str) -> tuple[list[CheckerResult], list[str], str]:
     if not runs_dir.is_dir():
         raise FileNotFoundError(f"no such runs directory: {runs_dir}")

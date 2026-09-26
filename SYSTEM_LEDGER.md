@@ -11,9 +11,10 @@
 |--------|-------|
 | **Active Phase** | Phase 0: Foundation & Governance 🔴 — **disputed, see K10** |
 | **Phase progress** | Phase 0's 6 exit criteria passed 26/26 checks on 2026-09-25, but `engine/app/**` was added afterwards in a session that did not close out. The phase status is therefore unverified against current disk |
-| **Files in the working tree** | **42** — 11 Markdown + 24 Python + 7 config/deploy/CI. Excludes `.git/`, `engine/.venv/`, `__pycache__/`, `engine/runs/`, `.pytest_cache/`, `engine/.tools/`. **23 are committed; 19 are untracked and 10 are modified** (the 10 modified are a subset of the 23 — do not add the two numbers together; 23 + 19 = 42) |
+| **Files in the working tree** | **81** — 49 Python + 13 Markdown + 19 config/deploy/CI. Excludes `.git/`, `engine/.venv/`, `__pycache__/`, `engine/runs/`, `.pytest_cache/`, `engine/.tools/`. **42 are committed; 39 are untracked and 3 are modified** (the 3 modified are a subset of the 42 — do not add the two numbers together; 42 + 39 = 81). The jump from 42 is `demo_target/` (36) and `bench/` (3) landing 2026-09-26 |
 | **Application code files** | **24** — 15 under `engine/app/` and `engine/`, 9 under `engine/tests/`. Not greenfield. See K8 for how this count was wrong until 2026-09-25 |
-| **Tests** | **8 files, 76 tests, all passing** — `test_adjudicator.py` (19), `test_runs.py` (11), `test_secrets.py` (6), `test_semantic.py` (11), `test_sarif.py` (12), `test_gate.py` (4), `test_comment.py` (9), `test_integration.py` (4). Measured by a `pytest` run on 2026-09-26. Still no test that exercises the HTTP surface over a real socket |
+| **Tests** | **8 files, 79 tests, all passing** — `test_adjudicator.py` (22), `test_sarif.py` (12), `test_semantic.py` (11), `test_runs.py` (11), `test_comment.py` (9), `test_secrets.py` (6), `test_integration.py` (4), `test_gate.py` (4). Measured by `pytest --collect-only` + a full run on 2026-09-26. **This file previously said 76, and the Verification Log below said 74; both were wrong because `test_adjudicator.py` was recorded as 19 when it holds 22.** Still no test that exercises the HTTP surface over a real socket |
+| **Corpus** | `demo_target/` + `bench/` — **built 2026-09-26, never measured.** 9 of 10 fixtures planted; 3 cases have no checker by design, 2 are marked disputed. The runner reports `INCOMPLETE` and prints no rate, because K12 and K14 are both open |
 | **Build** | Imports verified working from `engine/` on Python 3.14.3. `engine/requirements.txt` now pins the installed set — K9 half closed. Still no `pyproject.toml` or `__init__.py` |
 | **Dependencies installed** | Pinned in `engine/requirements.txt` as of 2026-09-25, from `pip freeze` in `engine/.venv/` |
 | **Missing from the architecture** | `engine/app/routes/`, `engine/app/store.py`, `engine/app/checkers/deps.py`, `dashboard/` — none exist. `secrets.py`, `runlog.py`, `sarif.py`, and `.github/workflows/trustgate.yml` are now built |
@@ -22,7 +23,7 @@
 | **SARIF** | `engine/app/sarif.py` converts a `VerdictRecord` to SARIF 2.1.0. Produced end-to-end locally and validated against both the OASIS schema and GitHub's stricter required table. **Never uploaded** — that requires the workflow to run on GitHub |
 | **The gate** | `.github/workflows/trustgate.yml`. YAML parses, all three actions SHA-pinned, every runtime read from each `action.yml`. **Never executed on GitHub** — UNVERIFIED, pushing any branch and reading the Actions tab is what verifies it |
 | **Git repository** | Initialized in this directory. Top level is **this folder**, not `E:/` |
-| **Last commit** | `649d0ff` (CLI + adjudicator tests). **15 untracked + 8 modified files from 2026-09-25/26 are uncommitted** |
+| **Last commit** | `0eda72d` (gate + five audit fixes). **39 untracked + 3 modified files are uncommitted**, including all of `demo_target/` and `bench/` |
 | **Time remaining** | Submissions close **Sun Sep 27 2026, 15:00 UTC** |
 | **Team** | 6 |
 
@@ -396,6 +397,82 @@ whose per-file granularity allows a mode-specific override later.
 - **Old item 7 (first test file)** — done, and extended to 28 tests across 2 files
 - **Old items 5 and 6** — 5 closed above; 6 narrowed to the gate
 
+### Created — 2026-09-26, the labelled corpus (wedge claim 3, workstream F)
+
+`WEDGE.md` claim 3 — "publish the false-positive rate" — was the largest honest
+gap in the repository: the harness did not exist, so the number could not be
+produced. It still cannot be, because K12 and K14 are open. What landed is the
+harness, and a runner that refuses to fake the number.
+
+| # | File | Purpose and architectural justification |
+|---|------|---------|
+| 42 | `demo_target/base/` + 10 `issue-NN-*/` | One clean order service and ten copies with **exactly one** planted defect each. One file differs per case, verified by `filecmp` — which is what makes "a finding the ground truth does not list is a false positive" a structural property rather than a claim. A separate `base/` also gives the diff something to be a diff *against* |
+| 43 | `bench/cases.json` | Ground truth, `extra="forbid"` and Pydantic-validated at load. `expected_checker` is **`null` for three cases** and `disputed: true` for two. The assignments were made by reading each checker's `FOCUS` string, not by matching case names — which is how `issue-01` (typosquat, no checker: `deps` is unbuilt) and `issue-07` (licensing, never designed) came out with no owner. Those rows are the corpus half of wedge claim 1 |
+| 44 | `bench/run_benchmark.py` | Generates each diff with `difflib`, invokes the **shipped CLI** exactly as the gate does, reads the verdict back with the same `compute_verdict` call `main.py:18` makes. No analysis path of its own. Enforces one rule at three levels: an incomplete checker gets no rate, a **degraded case is not scored at all**, and the run ends `INCOMPLETE` rather than `PASS` |
+| 45 | `bench/README.md`, `demo_target/README.md` | The `PYTHONIOENCODING` engine bug below, and the self-reference problem the corpus creates for the gate |
+
+#### Four things found while building it
+
+1. **The engine crashes when its output is piped on Windows — a real defect, not
+   a harness quirk.** `app/main.py:26`'s `_log` prints `→` (U+2192). Under
+   `subprocess(capture_output=True)`, Python falls back to cp1252 and raises
+   `UnicodeEncodeError: 'charmap' codec can't encode character '→'`, killing
+   the run before a single record is written. The Verification Log's "Emoji
+   survive stdout on this platform — checked, not assumed" is therefore **true
+   but narrower than it reads**: it holds for an interactive terminal and not for
+   a pipe. `python app/main.py … | tee` fails today. The one-line fix
+   (`sys.stdout.reconfigure(encoding="utf-8")` in `main()`) is **not applied** —
+   it is outside the scope the corpus was built under. The runner works around it
+   with `PYTHONIOENCODING` in the child env and says so.
+2. **A crash and a `BLOCK` are indistinguishable by exit code.** The engine exits
+   1 on `BLOCK`; an unhandled traceback also exits 1. The runner's first version
+   read `returncode not in (0, 1)` and silently scored a crashed run as a
+   verdict. It now scans stderr for `Traceback` first. Caught only because the
+   first real run produced *no run records at all* and the empty result looked
+   like a clean miss.
+3. **`.gitleaksignore` cannot suppress the corpus's own secret.** The vendor
+   README is explicit that it holds finding **fingerprints**, not paths — so the
+   path-based ignore this session set out to write would have been silently
+   inert, which is the exact failure mode Rule 00 exists to prevent. The
+   alternative, a root `.gitleaks.toml` carrying only an `[[allowlists]]` block,
+   is **worse than the problem**: gitleaks' config is replacement, not merge, so
+   a config with no `[[rules]]` detects nothing at all and the secrets gate
+   becomes a silent no-op. Neither was added. The conflict is documented in
+   `demo_target/README.md` with the two real fixes as a team decision.
+4. **`issue-05-unsafe-deserialize` is not planted.** A reachable
+   `pickle.loads` on client-controlled bytes was **declined by the sandbox
+   classifier as an RCE surface** and was not worked around. `cases.json` marks
+   it `expected_line: null` and the runner skips it and says why, rather than
+   reporting a false negative for a fixture that does not exist.
+
+#### Declined again on 2026-09-26, same reasons
+
+A tenth pasted prompt repeated the `backend/` tree, the five invented checker
+names, the 5/2/1 score, a `ThreadPoolExecutor` orchestrator, a `frontend/` with
+five named components, and instructions to move `AGENTS.md`, `AI_CONTEXT.md`,
+`PROJECT_ROADMAP.md`, and `SYSTEM_LEDGER.md` into `docs/`. All declined:
+
+- **The renames.** `secrets.py` → `dependency_verifier.py` asserts a checker
+  that does not exist (`deps` is unbuilt, K13); a `license_checker.py` was never
+  designed. Renaming working, tested code to describe capabilities the repo lacks
+  is the failure this project exists to catch, pointed the other way.
+- **`AGENTS.md` → `docs/BOB_USAGE.md`.** `AGENTS.md` is the portable agent-rules
+  spine read by Bob, Cursor, Codex, and Aider — it is not a Bob usage log, and
+  nothing has ever been written to it. `.bob/rules/` reference the other three
+  governance files by bare name in 15 places, and
+  `01-planning-governance.md:17` defines the **Tier 1 approval boundary** by
+  pointer into `PROJECT_ROADMAP.md`'s deliverables table. Moving them makes
+  every boot-sequence step open a file that is not there, and if the Tier 1
+  boundary silently resolves to nothing, every edit reclassifies from no-approval
+  to one-line confirm.
+- **The 5/2/1 score, fourth time.** Unchanged: five `low` findings would score 5
+  and `BLOCK` a PR the current rule reviews.
+- **The `frontend/`.** It does not exist — zero `.jsx`/`.tsx`/`package.json` in
+  the repository. `vercel.json` declares `npm run build` at a root with no
+  `package.json` and has never been deployable; `README.md` already says so.
+
+
+
 ### Next session must pick up first
 
 > Read `AI_CONTEXT.md`, `PROJECT_ROADMAP.md`, and `SYSTEM_LEDGER.md`. **Note that application
@@ -476,3 +553,11 @@ whose per-file granularity allows a mode-specific override later.
 | 2026-09-26 | **74 tests pass** (19 adjudicator + 9 runlog + 6 secrets + 11 semantic + 12 sarif + 4 gate + 9 comment + 4 integration), Python 3.14.3 / pytest 9.1.1 | The 61 pre-existing tests were re-run after every change and never modified. `test_gate.py` matters most here: `render()` gained a summary line, and the `^VERDICT[ \t]+BLOCK` pattern the workflow greps for still matches — which is why the summary deliberately does not reuse the `VERDICT  ` prefix |
 | 2026-09-26 | **`python -m pytest` from `engine/` collects cleanly** | `integration_test.py` matches pytest's `*_test.py` default glob. Checked rather than assumed: 74 tests collected, no import collision, no error. A name that looks like a test file but is not one is worth confirming rather than renaming on suspicion |
 | 2026-09-26 | **Ledger counts derived, not adjusted** | 42 files (24 `.py` + 11 `.md` + 7 config) by the documented `find` rule. `git ls-files --others --exclude-standard` returns 19 untracked; `git status --porcelain` gives 29 lines = 10 modified + 19 untracked, because `.github/` and `engine/samples/` are each one untracked *directory*. **23 committed + 19 untracked = 42, reconciling with the filesystem count** — the two independent methods agreeing is what makes both numbers trustworthy, and it is the check the previous four wrong counts lacked |
+| 2026-09-26 | **The engine crashes when its stdout is piped on Windows — a real defect, not a harness quirk** | `app/main.py:26`'s `_log` prints `→` (U+2192). Under `subprocess(capture_output=True)` Python falls back to cp1252 and raises `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' at position 11`, exiting before any record is written. **This narrows an earlier entry in this same log**: "Emoji survive stdout on this platform — checked, not assumed" is true for an interactive terminal and false for a pipe. `python app/main.py … \| tee` fails today. The one-line fix (`sys.stdout.reconfigure(encoding="utf-8")`) is **not applied** — out of the corpus build's scope. Found by the corpus, not by reading the code |
+| 2026-09-26 | **A crash and a `BLOCK` are indistinguishable by exit code** | The engine exits 1 on `BLOCK`; an unhandled traceback also exits 1. The benchmark runner's first version tested `returncode not in (0, 1)` and would have scored a crashed run as a verdict. It now scans stderr for `Traceback` before trusting the code. Caught only because the first real run produced **no run records at all** and the empty result read as a clean miss — the same shape as the K15 fail-open, one layer up |
+| 2026-09-26 | **A degraded case was being scored as a false negative** | With all four checkers degraded, every expected-checker case reported `fn`. True arithmetic, false meaning: nothing had run, so nothing had been missed. The runner now refuses to score any case whose `VerdictRecord.degraded` is true, and reports it as `degraded - not scored`. The per-checker rule (no rate without a clean run) already existed; this extends it to the case level |
+| 2026-09-26 | **`.gitleaksignore` cannot do what it was going to be used for** | Read from the vendor README rather than assumed: it holds finding **fingerprints**, not paths, so the path-based ignore this session set out to write would have been silently inert. The alternative — a root `.gitleaks.toml` with only an `[[allowlists]]` block — is worse, because gitleaks' config is **replacement, not merge**: no `[[rules]]` means nothing is detected and the secrets gate becomes a silent no-op. **Neither was added.** A visible false positive on one fixture beats an invisible dead gate; the real fix is the team's |
+| 2026-09-26 | **K12 and K14 reproduced through an independent code path** | The benchmark drove the real CLI across 9 planted cases. `secrets` → `FileNotFoundError: [WinError 2]` (gitleaks absent, K14); `authz`/`injection`/`business` → `ProviderUnavailable: GROQ_API_KEY is not set` (K12). Both blockers confirmed by a second, unrelated harness, and the run correctly ends `INCOMPLETE` with **no rate printed for any checker** |
+| 2026-09-26 | **This ledger's own test count was wrong twice** | Current State said 76, the log's last entry said 74, and disk says **79** — `test_adjudicator.py` holds 22 tests and was recorded as 19. Derived from `pytest --collect-only` per file this session, not adjusted to match a remembered total. Sixth time this file has carried a wrong count |
+| 2026-09-26 | **`issue-05-unsafe-deserialize` left unplanted, on purpose** | Writing a reachable `pickle.loads` fixture was **declined by the sandbox classifier as an RCE surface** and was not re-attempted through another tool. `cases.json` carries `expected_line: null` and the runner skips the case with the reason printed, so the corpus reports 9 of 10 rather than a fabricated 10 |
+| 2026-09-26 | **Tenth pasted prompt mapped, five requirements declined again** | The `backend/` rename, the five invented checker names, the 5/2/1 score, the `frontend/`, and moving the four governance files into `docs/`. Each declined on evidence and each recorded with its reason, so the next session does not re-derive them. The `docs/` move is the one with a silent cost: `01-planning-governance.md:17` defines the Tier 1 approval boundary by pointer into `PROJECT_ROADMAP.md`, so relocating that table breaks the approval model rather than just a path |
