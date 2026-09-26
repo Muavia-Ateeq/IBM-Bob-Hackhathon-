@@ -15,7 +15,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from app.adjudicator import SEVERITY_ORDER, adjudicate
-from app.checkers import authz, business, injection, secrets
+from app.checkers import authz, business, injection, prompt_injection, secrets
 from app.checkers.base import Checker, run_all
 from app.config import Settings, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
@@ -23,7 +23,7 @@ from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, writ
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
 
-CHECKER_MODULES = (secrets, authz, injection, business)
+CHECKER_MODULES = (secrets, authz, injection, prompt_injection, business)
 
 
 def _log(message: str) -> None:
