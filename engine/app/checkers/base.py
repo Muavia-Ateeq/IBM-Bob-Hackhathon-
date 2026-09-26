@@ -48,13 +48,36 @@ async def execute(checker: Checker, diff: str, workspace: str, timeout_s: int) -
     )
 
 
+async def _notified(
+    coro: Awaitable[CheckerResult], on_result: Callable[[CheckerResult], None] | None
+) -> CheckerResult:
+    result = await coro
+    if on_result is not None:
+        on_result(result)
+    return result
+
+
 async def run_all(
-    factory: Callable[[], Sequence[Checker]], diff: str, workspace: str, timeout_s: int
+    factory: Callable[[], Sequence[Checker]],
+    diff: str,
+    workspace: str,
+    timeout_s: int,
+    on_result: Callable[[CheckerResult], None] | None = None,
 ) -> list[CheckerResult]:
+    """Run every checker concurrently and return their results in roster order.
+
+    ``on_result`` fires the moment each checker settles rather than when the gather
+    completes, which is the only way to report true parallel progress: a run that takes as
+    long as its slowest checker would otherwise print nothing until the end. Results are
+    still returned in roster order regardless of completion order.
+    """
     checkers = factory()
     return list(
         await asyncio.gather(
-            *(execute(checker, diff, workspace, timeout_s) for checker in checkers)
+            *(
+                _notified(execute(checker, diff, workspace, timeout_s), on_result)
+                for checker in checkers
+            )
         )
     )
 

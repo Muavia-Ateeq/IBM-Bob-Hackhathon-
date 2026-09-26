@@ -61,10 +61,13 @@ needs judgement, and never let the second kind silently stand in for the first.*
 
 ## The ninety-second demo
 
-**This is the demo that runs today.** It is a terminal, not a pull request, because the
-GitHub gate is not built — see `README.md` → *Not built*.
+**This is the demo that runs today.** It is a terminal, not a pull request. The GitHub gate
+**is** written — `.github/workflows/trustgate.yml`, SHA-pinned, with a tested adjudicator
+behind it — but it has never executed on a runner, and every run that reaches a reviewer
+without `GROQ_API_KEY` degrades to `REVIEW`. See `README.md` → *Not built* for exactly what
+has and has not run.
 
-1. `python app/main.py --diff change.diff` with `GROQ_API_KEY` set. Wall-clock appears.
+1. `python app/main.py --diff samples/example.diff` with `GROQ_API_KEY` set. Wall-clock appears.
 2. Findings print, each with its file, line, and quoted source line.
 3. The verdict reads `PASS`, `REVIEW`, or `BLOCK`, and the reason names the finding that
    decided it.

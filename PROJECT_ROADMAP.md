@@ -52,19 +52,26 @@ without per-file approval once the batch is approved:
 - Creating `engine/`, `dashboard/`, or `.github/workflows/`
 - Any git commit
 
-> ### ⚠️ Scope discrepancy — unresolved, Tier 3 (recorded 2026-09-25)
+> ### ⚠️ Scope discrepancy — unresolved, Tier 3 (recorded 2026-09-25, widened twice)
 >
-> The boundaries above forbid application code. **`engine/app/**` nevertheless contains 10
-> Python files** — schemas, the adjudicator, the checker base, three LLM checkers, the
-> config loader, and the Groq client.
+> The boundaries above forbid application code. **`engine/app/**` nevertheless contains 13
+> Python files** — schemas, the adjudicator, the checker base, three LLM checkers, one
+> deterministic checker, the config loader, the Groq client, the run log, and the entry point.
 >
 > The record cannot say whether a phase transition happened without this file being updated,
 > or whether the code landed outside approved scope. **This is deliberately left unresolved**,
 > because a phase transition is a Tier 3 decision and not an agent's to make. Tracked as **K10**
 > in `SYSTEM_LEDGER.md`; it is the first item in that file's Next Actions.
 >
+> **The 🔴 ACTIVE marker is deliberately left on Phase 0.** A second session added 3
+> application files, one schema model, and 3 deploy configs under a user-approved batch. That
+> approval authorised the edits; it was not a phase transition, and moving this marker is not
+> an agent's call.
+>
 > Consequence: **no phase status in this repository can be trusted until a human resolves it.**
-> Everything else in Phase 0 verified clean (26/26 checks, 2026-09-25).
+> Everything else in Phase 0 verified clean (26/26 checks, 2026-09-25). One Phase 0
+> deliverable, `README.md`, was corrected: its verdict table contradicted the code.
+
 **Exit criteria — all must hold:**
 1. All three governance files contain their required sections
 2. Exactly one 🔴 ACTIVE in this file

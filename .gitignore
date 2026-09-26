@@ -33,6 +33,16 @@ sarif/
 corpus/output/
 corpus/results/
 
+# Run records — the same reason as *.sarif above. Each runs/<run_id>_<checker>.json carries a
+# Finding.evidence verbatim, and for the secrets checker that quote is a matched credential
+# fragment. Anchored to engine/ so a source directory named runs/ elsewhere is still tracked.
+/engine/runs/
+
+# Pinned scanner binaries, fetched and checksum-verified locally, never committed.
+# A vendored 8MB executable from a third-party release is not something a source repo should
+# carry, and an unverified one is worse than none. See SYSTEM_LEDGER.md K14 for the fetch steps.
+/engine/.tools/
+
 # Local databases
 # Anchored to the repo root on purpose. An unanchored `data/` matches at ANY depth and would
 # silently exclude engine/app/data/ or dashboard/src/data/ — a findings store is exactly the

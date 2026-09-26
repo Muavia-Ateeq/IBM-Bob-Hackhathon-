@@ -12,11 +12,11 @@
 | **Name** | TrustGate |
 | **Event** | IBM Bob 2.0 Hackathon — lablab.ai, online, Sept 25–27 2026 |
 | **Deadline** | Submissions close **Sun Sep 27 2026, 15:00 UTC** |
-| **Type** | Three-service monorepo: Python/FastAPI verdict engine + React/Vite dashboard + GitHub Actions gate |
+| **Type** | Intended three-service monorepo: Python/FastAPI verdict engine + React/Vite dashboard + GitHub Actions gate. The engine and the gate exist; `dashboard/` does not. |
 | **Team** | 6 |
 | **Domain** | Application security — pre-merge pull request risk gating |
-| **Core Purpose** | Run five security checkers in parallel against a pull request diff, merge their findings through a deterministic adjudicator, and emit one verdict — `PASS`, `REVIEW`, or `BLOCK` — with cited evidence |
-| **Status** | Greenfield. No application code exists yet. |
+| **Core Purpose** | Run security checkers in parallel against a pull request diff, merge their findings through a deterministic adjudicator, and emit one verdict — `PASS`, `REVIEW`, or `BLOCK` — with cited evidence |
+| **Status** | Engine core built and tested, runnable from the CLI. Four of five checkers exist; none has produced a real finding yet. The SARIF converter, the GitHub gate, the PR-comment formatter, and a four-check smoke test are built but **have never run live** — no workflow execution, no accepted upload, no comment posted. The dashboard is **not built**. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
 
 ### Naming constraints (verified, not hypothetical)
 
@@ -52,7 +52,7 @@ Consequences, binding on this project:
 | Pydantic v2 | Enforces the checker output schema **at the boundary** — an LLM that returns malformed JSON is rejected before it reaches the adjudicator |
 | httpx | Async HTTP client for Groq; connection pooling matters at 5 concurrent calls |
 | Groq SDK (`groq`) | Primary LLM inference. OpenAI-compatible surface, low latency — the property that makes 5 parallel checkers feel instant |
-| SQLite (stdlib `sqlite3`) | Zero-ops verdict log. A single file is swappable for Postgres later; do not add a DB server during a 48h build |
+| SQLite (stdlib `sqlite3`) | Intended for the verdict log. A single file is swappable for Postgres later; do not add a DB server during a 48h build. **Not built** — `runlog.py` JSON records are what exists. |
 
 ### Dashboard — `dashboard/`
 
@@ -70,11 +70,18 @@ Consequences, binding on this project:
 | SARIF 2.1.0 | Native GitHub Code Scanning format. Findings render inline on the diff |
 | `github/codeql-action/upload-sarif` | Uploads findings. Requires `security-events: write` permission |
 
+**State: written and unit-tested, never executed on GitHub.** `tests/test_gate.py` pins the
+BLOCK-grep pattern against the CLI's own output so a format change cannot silently disable
+blocking, and `tests/test_sarif.py` validates the report against both the OASIS schema and
+GitHub's stricter required table. What is *not* verified: that the workflow runs at all, and
+that Code Scanning accepts the upload. UNVERIFIED — pushing any branch and reading the Actions
+tab is what verifies it.
+
 ### Deterministic scanners (checker tier 1)
 
 | Tool | Role | Verified fact |
 |------|------|----------------|
-| [Gitleaks](https://github.com/gitleaks/gitleaks) | Secret detection | Deterministic regex + entropy. `gitleaks-action@v3`. Requires `fetch-depth: 0`. MIT |
+| [Gitleaks](https://github.com/gitleaks/gitleaks) | Secret detection | Deterministic regex + entropy. The workflow installs a pinned release tarball and verifies its SHA-256 rather than using an action — the action's runtime was not verified, and an unverified action in a security gate is the same risk as an unverified binary. Requires `fetch-depth: 0`. MIT |
 | [OSV-Scanner](https://github.com/google/osv-scanner) v2.x | Dependency vulnerabilities | Apache-2.0. Supports pip and npm. Has call analysis to cut false positives. v2.5.1 published Aug 2026 |
 
 **Why deterministic tools exist in an "AI checker" product:** a leaked API key and a known CVE are *facts with answers*. Spending an LLM call to rediscover them is slower, costlier, and less accurate than a scanner built for exactly that job. The LLM budget goes to the classes of bug that have no lookup table.
@@ -96,38 +103,48 @@ Consequences, binding on this project:
 │   ├── 01-planning-governance.md
 │   ├── 02-session-continuity.md
 │   └── 03-scope-control.md
-├── engine/                    # Python/FastAPI verdict engine
+├── engine/                    # Python/FastAPI verdict engine — BUILT
 │   ├── app/
-│   │   ├── main.py            # App factory, middleware, lifespan
-│   │   ├── routes/            # HTTP surface only — no business logic
-│   │   │   ├── analyze.py     # POST /analyze  — the gate's entry point
-│   │   │   ├── findings.py    # GET  /findings — dashboard feed
-│   │   │   └── health.py      # GET  /health   — Actions health gate
+│   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
 │   │   ├── checkers/          # One module per checker. See roster below.
-│   │   │   ├── base.py        # Checker protocol + shared Finding model
-│   │   │   ├── secrets.py     # Tier 1 — Gitleaks
-│   │   │   ├── deps.py        # Tier 1 — OSV-Scanner
+│   │   │   ├── base.py        # Checker protocol, timeout, asyncio.gather fan-out
+│   │   │   ├── semantic.py    # The shared Tier 2 LLM checker
+│   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT, never run
 │   │   │   ├── authz.py       # Tier 2 — LLM
 │   │   │   ├── injection.py   # Tier 2 — LLM
-│   │   │   └── business.py    # Tier 2 — LLM
+│   │   │   ├── business.py    # Tier 2 — LLM
+│   │   │   ├── deps.py        # Tier 1 — OSV-Scanner — NOT BUILT (blocked, ledger K13)
+│   │   │   └── CONTRIBUTING.md # The contract every checker author implements
 │   │   ├── adjudicator.py     # Deterministic verdict. No LLM in this path.
-│   │   ├── llm/               # Groq client, schema enforcement, retry
-│   │   ├── sarif.py           # Finding → SARIF 2.1.0
-│   │   ├── store.py           # SQLite verdict log
+│   │   ├── llm/               # Groq client (strict mode), FINDING_SCHEMA
+│   │   ├── runlog.py          # runs/*.json — write records, recompute a verdict from disk
+│   │   ├── comment.py         # VerdictRecord → PR comment. Local, NOT wired into the gate
+│   │   ├── config.py          # Settings, env-overridable
+│   │   ├── sarif.py           # Finding → SARIF 2.1.0 — BUILT, never uploaded
+│   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
 │   │   └── schemas.py         # Pydantic request/response contracts
-│   ├── tests/
-│   ├── corpus/                # Labelled vulnerable samples for FP measurement
-│   ├── pyproject.toml
-│   └── .env.example
-├── dashboard/                 # React/Vite
+│   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
+│   ├── tests/                 # 76 passing across 8 files
+│   ├── requirements.txt       # Pinned installed set
+│   ├── corpus/                # Labelled vulnerable samples for FP measurement — NOT BUILT
+│   └── pyproject.toml         — NOT BUILT
+├── dashboard/                 # React/Vite — NOT BUILT
 │   └── src/
 │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
 │       ├── lib/               # API client, verdict token mapping
 │       └── types.ts           # Mirrors engine/app/schemas.py
 ├── .github/workflows/
-│   └── trustgate.yml          # The gate
+│   └── trustgate.yml          # The gate — BUILT, never executed on GitHub
+├── render.yaml · Procfile · vercel.json   # Deploy config, written, never deployed
 └── README.md
 ```
+
+`routes/` was planned and never built as a package. `build_app()` in `main.py` carries the two
+routes it needs — `/api/health` and `/api/pr/{pr}/verdict` — declared inline, because a
+package for two handlers is a directory with no reason to exist yet. There is no
+`POST /analyze` and no HTTP analysis entry point, so `schemas.AnalyzeRequest` is still
+referenced by nothing. The verdict route is a `def`, not an `async def`, so the run-log glob
+runs in Starlette's threadpool rather than blocking the event loop.
 
 ### The checker roster — five, deliberately heterogeneous
 
@@ -146,14 +163,16 @@ Tiers 1 and 2 fail in different ways, and that is the point. Tier 1 is **precise
 | Pattern | Where | Description |
 |---------|-------|-------------|
 | Protocol-based checker | `engine/app/checkers/base.py` | Every checker exposes the same async interface. Adding a sixth checker must not touch the orchestrator. |
-| Fan-out / fan-in | `engine/app/routes/analyze.py` | Five checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. |
+| Fan-out / fan-in | `engine/app/checkers/base.py` (`run_all`) | Checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. **Four exist, not five** — `deps` is not built. |
 | Deterministic adjudicator | `engine/app/adjudicator.py` | Pure function, no I/O, no LLM. Given the same findings it always returns the same verdict. Testable without network. |
-| Schema-at-the-boundary | `engine/app/llm/` | Pydantic validates every LLM response. A malformed response becomes a checker *error*, never a silent finding. |
-| Tamper-evident log | `engine/app/store.py` | Every verdict is appended with a hash of its inputs. The log is append-only. |
+| Schema-at-the-boundary | `engine/app/llm/` + `checkers/semantic.py` | Pydantic validates every LLM response, and a finding whose evidence is not a verbatim quote from the diff is rejected outright. A malformed response becomes a checker *error*, never a silent finding. |
+| Run log | `engine/app/runlog.py` | One JSON record per checker per run under `runs/`, re-readable into a verdict. `input_hash` is a SHA-256 over the **run records**, not over verdict inputs. Append-only SQLite (`store.py`) is **NOT BUILT**, so there is no tamper-evidence. |
 
 ### File boundaries — hard rules
 
-- `routes/` **never** imports from `checkers/` internals. It calls the orchestrator.
+- `routes/` **never** imports from `checkers/` internals. It calls the orchestrator. The two
+  routes currently live inline in `main.build_app()`; that is where they move if a third
+  arrives, not into a package that exists to hold two handlers.
 - `adjudicator.py` **never** imports `llm/`. This is what makes it deterministic. If you need a model in the verdict path, the verdict is no longer reproducible — stop and reconsider the design.
 - `checkers/` modules **never** import each other. Checkers are independent experts; a checker that trusts another checker's opinion is no longer an independent signal.
 - `dashboard/` **never** calls a Groq key. All inference lives server-side in `engine/`.
@@ -238,10 +257,10 @@ gates the merge. `UNKNOWN` is what the operator sees. **Do not add `UNKNOWN` to 
 
 ### ALWAYS
 
-- **ALWAYS** run all five checkers even when an early one finds something critical. Partial results are not a verdict.
+- **ALWAYS** run every checker even when an early one finds something critical. Partial results are not a verdict.
 - **ALWAYS** set `temperature: 0` on every LLM call. Non-determinism in a security verdict is a defect.
 - **ALWAYS** validate every LLM response against a Pydantic schema before use.
-- **ALWAYS** record raw findings to a `verdicts` SQLite table with a SHA-256 of the inputs, so any past verdict can be reproduced and audited.
+- **ALWAYS** record raw findings with a SHA-256 alongside them, so any past verdict can be reproduced and audited. Today this is `runlog.py`: one JSON record per checker per run under `runs/`, with `input_hash` a SHA-256 over those records. The append-only SQLite table described below is **not built** — do not assume it exists.
 - **ALWAYS** upload SARIF with `if: always()` on the step. A scanner that exits non-zero skips its own upload without it, and the findings are silently lost.
 - **ALWAYS** request `security-events: write` permission for the SARIF upload step.
 - **ALWAYS** set `fetch-depth: 0` when checking out for Gitleaks — it needs full history.
@@ -264,7 +283,7 @@ Python SDK: `pip install groq` → `from groq import Groq` → `client.chat.comp
 
 | Purpose | Model | Why |
 |---------|-------|-----|
-| Tier 2 checkers (3 LLM checkers) | `openai/gpt-oss-120b` | Only the `gpt-oss` family supports **strict** JSON-schema mode, which guarantees schema-valid output. A checker that cannot be parsed is a checker that does not run. |
+| Tier 2 checkers (3 LLM checkers) | `openai/gpt-oss-120b` | **Strict** JSON-schema mode is supported by the `gpt-oss` family **and** `qwen/qwen3.8-27b` (see the supported-model list below). Strict mode guarantees a schema-valid object — it does **not** guarantee a non-empty `evidence` or `line >= 1`; those are enforced in `checkers/semantic.py`, because a checker that cannot be parsed is a checker that does not run. |
 | Adjudicator input shaping | same | Shares the finding schema, so one Pydantic model serves both. |
 | Fallback | `llama-3.3-70b-versatile` | Broader general capability, but **best-effort** JSON only — requires validation + retry. |
 
@@ -275,27 +294,37 @@ Groq exposes `response_format={"type": "json_schema", "json_schema": {...}}` in 
 - **Strict** (`strict: true`) — constrained decoding, output always matches the schema, never errors. Requires all fields `required` and `additionalProperties: false`. Supported on a limited model set.
 - **Best-effort** (`strict: false`, default) — attempts the schema, may occasionally deviate.
 
-**Verify the supported-model list at Phase 2** against `console.groq.com/docs/structured-outputs#supported-models`. As of this writing the docs pages are not fully consistent with each other — one lists `openai/gpt-oss-20b`, `openai/gpt-oss-120b`, and `qwen/qwen3.8-27b`; another omits the Qwen entry. **Do not hardcode this list from memory. Read it.**
+**Verified 2026-09-25** against `console.groq.com/docs/structured-outputs#supported-models` (ledger K1, closed): strict mode supports `openai/gpt-oss-20b`, `openai/gpt-oss-120b`, and `qwen/qwen3.8-27b`. The docs pages are not fully consistent with each other — one omits the Qwen entry. Re-read the page before changing the model; do not hardcode this list from memory.
 
 Hard limitations, both verified:
 
 - **Streaming is not supported** with Structured Outputs. All inference is non-streaming.
 - **Tool use is not supported** with Structured Outputs. Checkers are prompted, not tool-equipped.
 
-### Fallback chain
+### Fallback chain — **step 1 only is implemented**
 
-1. `openai/gpt-oss-120b`, strict mode
-2. `openai/gpt-oss-120b`, best-effort + Pydantic validation + 1 retry
-3. `llama-3.3-70b-versatile`, best-effort + Pydantic validation + 1 retry
-4. **Checker records an error → verdict degrades to `REVIEW`.** Never `PASS`.
+1. `openai/gpt-oss-120b`, strict mode — **implemented**, a single uncaught call
+2. `openai/gpt-oss-120b`, best-effort + Pydantic validation + 1 retry — **NOT BUILT**
+3. `llama-3.3-70b-versatile`, best-effort + Pydantic validation + 1 retry — **NOT BUILT** (the model ID appears nowhere in the codebase; `config.py` hardcodes one)
+4. **Checker records an error → verdict degrades to `REVIEW`.** Never `PASS`. — **implemented and tested**, but via `checkers/base.py`'s blanket exception handler and `adjudicator.py`, not via any designed recovery.
+
+So today the first hiccup on any LLM checker — a 429, a malformed body — permanently degrades that
+checker for that run. There is no retry and no recovery. The honest summary is that steps 2 and 3
+do not exist and step 4 holds for a different reason than the one intended here.
 
 Documented secondary provider, not implemented in v1: IBM watsonx / Granite (`ibm/granite-4-h-small`). Retained deliberately — it is on-theme for an IBM event and its models carry IBM's indemnification, which third-party models do not. Relevant if this ships beyond the hackathon.
 
 ### Concurrency and cost
 
-- Five checkers run via `asyncio.gather` — one `httpx.AsyncClient` shared across all of them, not five clients.
-- **Cache by input hash.** Identical diff → identical findings. Key on SHA-256 of (repo, base SHA, head SHA, checker version). Without this, re-running a gate on an unchanged PR burns quota for nothing.
-- Per-checker timeout: 30s. Whole-run budget: 90s. A PR gate that takes longer than a coffee break gets disabled by its users.
+- Checkers run via `asyncio.gather` — one `GroqProvider` instance is shared across all of them, not one per checker. **Four checkers exist, not five.** There is no `httpx.AsyncClient` in this codebase; the Groq SDK owns its own HTTP client and TrustGate neither creates nor closes it.
+- **Cache by input hash.** Identical diff → identical findings. Key on SHA-256 of (repo, base SHA, head SHA, checker version). **NOT BUILT.** `VerdictRecord.input_hash` exists but hashes the run *records* after the model calls were already paid for, and nothing consults it before invoking a checker. Re-running on an unchanged PR still burns full quota.
+- Per-checker timeout: 30s — **implemented, not exercised.** `base.execute` wraps each
+  checker in `asyncio.wait_for` and converts a `TimeoutError` into a `status=TIMEOUT`
+  result. The only test touching timeouts fabricates a `TIMEOUT` `CheckerResult` and asserts
+  the adjudicator's reaction; nothing in `tests/` triggers a real one. `SYSTEM_LEDGER.md`
+  K-unverified is right and this line was the optimistic one.
+- Whole-run budget: 90s — **NOT BUILT.** `Settings.run_budget_s` is read by nothing; `main.py` measures elapsed only to print it. A PR gate that takes longer than a coffee break gets disabled by its users.
+- **Cost tracking is NOT BUILT.** `VerdictRecord.cost_usd` has exactly one assignment, `runlog.py` → `None`. The token counts that would feed it are gathered in `llm/client.py` and discarded in `checkers/semantic.py`. No cost number may be published.
 
 ### Tool execution boundaries
 

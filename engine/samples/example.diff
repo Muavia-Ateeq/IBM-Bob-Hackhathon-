@@ -1,0 +1,24 @@
+--- a/app/orders.py
++++ b/app/orders.py
+@@ -36,8 +36,12 @@ from flask import request
+ def find_order(conn, order_id):
+     cur = conn.cursor()
++    cur.execute("SELECT * FROM orders WHERE id = " + order_id)
++    return cur.fetchone()
+ 
++
++
+ def export_order(conn, order_id):
+     """Export a customer's invoice. Anyone with a valid session may call this."""
+     row = conn.execute(
+         "SELECT * FROM orders WHERE id = ?", (order_id,)
+     ).fetchone()
++    return send_file(make_invoice(row), as_attachment=True)
+--- a/app/config.py
++++ b/app/config.py
+@@ -1,2 +1,5 @@
+ import os
++SECRET_KEY = "dev-only-do-not-ship-3f9a2c"
++
++
+ DEBUG = os.environ.get("DEBUG", "1") == "1"

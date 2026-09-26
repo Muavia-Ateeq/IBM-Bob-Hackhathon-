@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: trustgate-engine
+    runtime: python
+    plan: free
+    rootDir: engine
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:build_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: RUNS_DIR
+        value: runs
+      - key: PYTHONPATH
+        value: .
+      - key: GROQ_API_KEY
+        sync: false

@@ -1,0 +1,157 @@
+# TrustGate — the gate.
+#
+# Two decisions here are load-bearing and both are deliberate. Read them before editing.
+#
+# 1. `pull_request`, NOT `pull_request_target`. `pull_request_target` runs with a writable
+#    token and access to repository secrets, so checking out and executing fork-authored
+#    requirements.txt and code under it is remote code execution with the GROQ_API_KEY in
+#    reach. Under `pull_request` a fork gets no secrets and the semantic checkers degrade to
+#    REVIEW, which is written to the job summary. Losing the model's opinion is an acceptable
+#    price; leaking the key is not.
+#
+#    That degraded REVIEW is NOT posted as a PR comment. Under this trigger GITHUB_TOKEN is
+#    read-only and a fork gets no token at all; posting would need `pull_request_target` (the
+#    RCE above) or a GitHub App with its own installation token. Neither exists. See the
+#    docstring in `engine/app/comment.py`, which runs from a machine or `workflow_dispatch`.
+#
+# 2. The engine exits 1 only on BLOCK. REVIEW does not hard-block — WEDGE.md is explicit that
+#    a human decides on REVIEW — but REVIEW is never silent: it is written to the job summary
+#    below. The final step re-derives the decision from the captured text rather than trusting
+#    the piped exit status, because `tee` masks it; it asserts the text is non-empty first, so
+#    a crashed engine is a red job and not a silent pass. Blocking on REVIEW too is a one-line
+#    change if the team decides a degraded run should hold a merge.
+#
+# Every action is pinned to a commit SHA. A floating tag in a security gate is remote code
+# execution with a trust boundary attached. Runtimes verified node24 on 2026-09-26: Node 20
+# was removed from GitHub hosted runners on 2026-09-16, so setup-python@v5 (node20) and
+# codeql-action@v3 (node20) would both fail here today.
+
+name: TrustGate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+
+jobs:
+  gate:
+    name: Security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Full history, not a shallow clone: the diff is computed against the merge base, and
+      # Gitleaks scans history-derived paths.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+
+      - name: Install engine dependencies
+        run: python -m pip install -r engine/requirements.txt
+
+      # Optional, but not `continue-on-error`: a failed DOWNLOAD warns and steps aside so the
+      # secrets checker degrades to REVIEW, which is the designed behaviour. A checksum
+      # MISMATCH exits non-zero and fails the job — that is not a degraded run, it is a binary
+      # that is not what it claims to be, and it must never reach a security gate.
+      - name: Install Gitleaks (pinned, checksum-verified)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          # Digest of gitleaks_8.30.1_linux_x64.tar.gz, from the publisher's own
+          # gitleaks_8.30.1_checksums.txt. This previously held d29144de…, which is the
+          # WINDOWS zip's digest: the sha256sum -c below compared a linux download against a
+          # windows checksum and failed every run, before the engine ever started.
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          if ! curl -sSfL -o gitleaks.tar.gz "$url"; then
+            echo "::warning::gitleaks download failed; the secrets checker will degrade to REVIEW"
+            exit 0
+          fi
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c - \
+            || { echo "::error::gitleaks archive does not match the pinned SHA-256"; exit 1; }
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Build the diff under review
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --no-color "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" > pr.diff
+          else
+            git diff --no-color HEAD~1 HEAD > pr.diff || true
+          fi
+          wc -c pr.diff
+          # An empty diff used to `exit 0`, which ends THIS STEP green while every later step
+          # still runs — the engine then reviews an empty file, finds nothing, and the job
+          # passes. A diff we could not build is a failure, not a clean bill of health.
+          test -s pr.diff || { echo "::error::could not build a non-empty diff to review"; exit 1; }
+
+      # The pipe to `tee` is deliberate: it keeps this step green so the SARIF upload below
+      # still runs, and the BLOCK decision is made explicitly in the final step against the
+      # captured text. A BLOCK must never skip its own upload.
+      #
+      # The corollary, which cost a real fail-open until 2026-09-26: `tee` creates its target
+      # whether or not python produced a byte, so a crash on import left an EMPTY verdict.txt,
+      # the summary block below returned 0, and the final step's grep found nothing and passed.
+      # An empty verdict.txt was indistinguishable from a clean run. Hence PIPESTATUS — the
+      # engine's real exit code, which `tee` swallows — and the liveness assert that uses it.
+      - name: Run TrustGate
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITLEAKS_BIN: gitleaks
+        run: |
+          set -uo pipefail
+          cd engine
+          python app/main.py \
+            --diff ../pr.diff \
+            --pr "${{ github.event.pull_request.number || 'dispatch' }}" \
+            --workspace .. \
+            --runs-dir runs \
+            --sarif ../trustgate.sarif | tee ../verdict.txt
+          engine_status=${PIPESTATUS[0]}
+          echo "engine exit status: ${engine_status}"
+          if [ ! -s ../verdict.txt ]; then
+            echo "::error::engine produced no verdict (exit ${engine_status}); a crash is not a pass"
+            exit 1
+          fi
+          {
+            echo '## TrustGate'
+            echo
+            echo '```'
+            cat ../verdict.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # if: always() is not optional. A BLOCK exits non-zero, and without this the step is
+      # skipped — the findings the run just produced silently vanish, which is the exact
+      # failure mode a security gate must not have.
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          sarif_file: trustgate.sarif
+          category: trustgate
+
+      - name: Fail the run on BLOCK
+        if: always()
+        run: |
+          if [ ! -s verdict.txt ]; then
+            echo "::error::no verdict was produced; this step cannot conclude anything"
+            exit 1
+          fi
+          if grep -qE '^VERDICT[[:space:]]+BLOCK' verdict.txt; then
+            echo "::error::TrustGate verdict is BLOCK — see the run summary for the cited evidence"
+            exit 1
+          fi
+          echo "Verdict is not BLOCK. Note that a degraded run is a REVIEW, never a PASS."

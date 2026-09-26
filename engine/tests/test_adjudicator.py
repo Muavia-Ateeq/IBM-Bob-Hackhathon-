@@ -156,6 +156,29 @@ def test_finding_rejects_path_traversal(path: str):
         )
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/etc/passwd",
+        "C:\\Windows\\System32\\drivers\\etc\\hosts",
+        "\\\\attacker\\share\\payload",
+    ],
+)
+def test_finding_rejects_an_absolute_path(path: str):
+    """`..` and an absolute path are the same escape; CONTRIBUTING.md promised both were
+    rejected and only the first was. A finding may only name a file in the repo under review."""
+    with pytest.raises(ValidationError):
+        Finding(
+            checker="authz",
+            severity=Severity.HIGH,
+            title="t",
+            detail="d",
+            file=path,
+            line=1,
+            evidence="x = 1",
+        )
+
+
 def test_finding_accepts_an_ordinary_path():
     assert finding().file == "app/example.py"
 

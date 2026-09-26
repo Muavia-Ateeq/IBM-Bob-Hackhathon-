@@ -147,11 +147,32 @@ A session that ends without a ledger update is a session whose knowledge is lost
 ## 7. CI Landmines — verified, do not relearn
 
 - GitHub **removed Node 20 from hosted runners entirely on Sep 16 2026**. Any action pinned
-  to Node 20 now fails. Check every action's runtime before adding it.
+  to Node 20 now fails. Read the runtime out of each action's `action.yml` before adding it —
+  `curl -sSL https://raw.githubusercontent.com/<owner>/<repo>/<tag>/action.yml | grep -A2 '^runs:'`
+- **Which versions are already dead** (runtimes read 2026-09-26):
+  `actions/setup-python@v5` is node20 → use v6/v7. `github/codeql-action@v2` is node16 and
+  `@v3` is node20 → use **v4**. `actions/checkout@v5+` is node24. Nearly every SARIF example
+  on the internet still says `codeql-action/upload-sarif@v3`, which now fails.
+- Pin every action to a **commit SHA**, not a tag. A floating tag in a security gate is remote
+  code execution with a trust boundary attached. Annotated tags resolve via
+  `git/ref/tags/<tag>` → `object.type: tag` → dereference once more to reach the commit.
 - SARIF upload needs `if: always()`. A scanner exiting non-zero otherwise skips its own
   upload and the findings vanish silently.
 - SARIF upload needs `security-events: write` permission.
 - Gitleaks needs `fetch-depth: 0` on checkout — it scans history.
+- **Use `pull_request`, never `pull_request_target`,** if the workflow touches a secret.
+  `pull_request_target` gets a writable token and repository secrets; checking out
+  fork-authored code under it is RCE with `GROQ_API_KEY` in reach. Under `pull_request` a
+  fork gets no secrets and the semantic checkers degrade to `REVIEW`, which is written to the
+  job summary. It is **not** posted as a PR comment: under `pull_request` a fork gets no
+  token at all, and posting needs `pull_request_target` (the RCE above) or a GitHub App.
+  Neither exists. See the docstring in `engine/app/comment.py`.
+- The OASIS SARIF schema URL that appears in GitHub's own docs example **404s**. The one that
+  resolves is `https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json`.
+- GitHub's Code Scanning layer requires more than the OASIS schema does: `rules[]` on the
+  driver, `partialFingerprints` (it reads `primaryLocationLineHash` only), and
+  `shortDescription`/`fullDescription`/`help` on every rule. Validating against OASIS alone
+  will not catch a missing one.
 - Groq Structured Outputs support **neither streaming nor tool use**.
 
 ---
