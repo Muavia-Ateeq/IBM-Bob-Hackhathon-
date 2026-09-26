@@ -49,12 +49,12 @@ without per-file approval once the batch is approved:
 **Out of scope for Phase 0 — do not start early:**
 - Writing any application code
 - Installing dependencies
-- Creating `engine/`, `dashboard/`, or `.github/workflows/`
+- Creating `backend/`, `dashboard/`, or `.github/workflows/`
 - Any git commit
 
 > ### ⚠️ Scope discrepancy — unresolved, Tier 3 (recorded 2026-09-25, widened twice)
 >
-> The boundaries above forbid application code. **`engine/app/**` nevertheless contains 13
+> The boundaries above forbid application code. **`backend/app/**` nevertheless contains 13
 > Python files** — schemas, the adjudicator, the checker base, three LLM checkers, one
 > deterministic checker, the config loader, the Groq client, the run log, and the entry point.
 >
@@ -99,7 +99,7 @@ Deliverable: the wedge statement, agreed by all 6. Everything in Phase 3 must tr
 ### Phase 2 — Stack Lock & Scaffold (T+3h → T+5h)
 
 - Confirm exact model IDs against live Groq docs — **including the strict-mode supported list**
-- Scaffold `engine/`, `dashboard/`, `.github/workflows/`
+- Scaffold `backend/`, `dashboard/`, `.github/workflows/`
 - Pin dependency versions into lockfiles
 - Confirm a Groq API key is present in the environment
 - Green test: the engine boots, the dashboard renders, `/health` returns 200
@@ -110,9 +110,9 @@ The long phase. Suggested split across 6 people, adjusted as the team sees fit:
 
 | Owner | Workstream |
 |-------|-----------|
-| A | `engine/app/llm/` — Groq client, strict schema enforcement, retry, cache-by-input-hash |
-| B | `engine/app/checkers/` — the 5 checkers + `base.py` protocol |
-| C | `engine/app/adjudicator.py` + `schemas.py` + `store.py` + `tests/` |
+| A | `backend/app/llm/` — Groq client, strict schema enforcement, retry, cache-by-input-hash |
+| B | `backend/app/checkers/` — the 5 checkers + `base.py` protocol |
+| C | `backend/app/adjudicator.py` + `schemas.py` + `store.py` + `tests/` |
 | D | `.github/workflows/trustgate.yml` + `sarif.py` + secrets/permissions plumbing |
 | E | `dashboard/` — API client, components, verdict rendering |
 | F | `corpus/` — labelled vulnerable samples; integration harness |

@@ -12,7 +12,7 @@
 #    That degraded REVIEW is NOT posted as a PR comment. Under this trigger GITHUB_TOKEN is
 #    read-only and a fork gets no token at all; posting would need `pull_request_target` (the
 #    RCE above) or a GitHub App with its own installation token. Neither exists. See the
-#    docstring in `engine/app/comment.py`, which runs from a machine or `workflow_dispatch`.
+#    docstring in `backend/app/comment.py`, which runs from a machine or `workflow_dispatch`.
 #
 # 2. The engine exits 1 only on BLOCK. REVIEW does not hard-block — WEDGE.md is explicit that
 #    a human decides on REVIEW — but REVIEW is never silent: it is written to the job summary
@@ -56,7 +56,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install engine dependencies
-        run: python -m pip install -r engine/requirements.txt
+        run: python -m pip install -r backend/requirements.txt
 
       # Optional, but not `continue-on-error`: a failed DOWNLOAD warns and steps aside so the
       # secrets checker degrades to REVIEW, which is the designed behaviour. A checksum
@@ -112,7 +112,7 @@ jobs:
           GITLEAKS_BIN: gitleaks
         run: |
           set -uo pipefail
-          cd engine
+          cd backend
           python app/main.py \
             --diff ../pr.diff \
             --pr "${{ github.event.pull_request.number || 'dispatch' }}" \

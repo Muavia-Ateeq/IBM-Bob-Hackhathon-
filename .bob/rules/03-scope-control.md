@@ -19,7 +19,7 @@ Out of scope until Phase 2 and explicit approval:
 
 - Writing application code
 - Installing dependencies
-- Creating `engine/`, `dashboard/`, or `.github/workflows/`
+- Creating `backend/`, `dashboard/`, or `.github/workflows/`
 - Any git commit
 
 ## Do not move a phase boundary

@@ -17,7 +17,7 @@ python bench/run_benchmark.py               # measure what can be measured
 ## Why these cases and not the ones the prompts asked for
 
 The case-to-checker assignment was made by reading the `FOCUS` string in each
-checker (`engine/app/checkers/*.py`), not by matching case names. Three cases
+checker (`backend/app/checkers/*.py`), not by matching case names. Three cases
 have **no checker at all**, and that is the corpus doing its job rather than
 failing to:
 

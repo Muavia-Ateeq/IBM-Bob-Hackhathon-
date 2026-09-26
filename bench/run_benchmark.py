@@ -34,7 +34,7 @@ from typing import Literal, Optional, Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENGINE_DIR = REPO_ROOT / "engine"
+ENGINE_DIR = REPO_ROOT / "backend"
 BENCH_DIR = REPO_ROOT / "bench"
 
 if str(ENGINE_DIR) not in sys.path:
@@ -148,7 +148,7 @@ def case_files(directory: Path) -> list[Path]:
 def build_diff(base_dir: Path, case_dir: Path, display_prefix: str) -> str:
     """Unified diff from base to one case.
 
-    Nothing in engine/app/ parses diff headers -- the string goes straight to the
+    Nothing in backend/app/ parses diff headers -- the string goes straight to the
     model -- so generating them here is safe, and generating rather than
     hand-writing them means a diff can never drift from its fixture.
     """
@@ -200,8 +200,8 @@ def run_case(corpus: Corpus, case: Case, workdir: Path) -> CaseResult:
     runs_dir.mkdir(parents=True, exist_ok=True)
     diff_file.write_text(diff, encoding="utf-8")
 
-    # engine/ must be the cwd: app/main.py imports `from app.checkers import ...`,
-    # so engine/ has to be on sys.path. The workspace is therefore engine-relative.
+    # backend/ must be the cwd: app/main.py imports `from app.checkers import ...`,
+    # so backend/ has to be on sys.path. The workspace is therefore backend-relative.
     #
     # PYTHONIOENCODING is set because main.py's progress logger prints U+2192.
     # Under a pipe on Windows Python falls back to cp1252 and _log raises

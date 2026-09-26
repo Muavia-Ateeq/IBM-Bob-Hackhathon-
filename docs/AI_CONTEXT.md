@@ -43,7 +43,7 @@ Consequences, binding on this project:
 > Phase 2 (Tier 2 approval). Writing version numbers here before they are installed
 > would be an unverified claim.
 
-### Verdict engine — `engine/`
+### Verdict engine — `backend/`
 
 | Technology | Rationale |
 |------------|-----------|
@@ -103,7 +103,7 @@ tab is what verifies it.
 │   ├── 01-planning-governance.md
 │   ├── 02-session-continuity.md
 │   └── 03-scope-control.md
-├── engine/                    # Python/FastAPI verdict engine — BUILT
+├── backend/                    # Python/FastAPI verdict engine — BUILT
 │   ├── app/
 │   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
 │   │   ├── checkers/          # One module per checker. See roster below.
@@ -137,7 +137,7 @@ tab is what verifies it.
 │   └── src/
 │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
 │       ├── lib/               # API client, verdict token mapping
-│       └── types.ts           # Mirrors engine/app/schemas.py
+│       └── types.ts           # Mirrors backend/app/schemas.py
 ├── .github/workflows/
 │   └── trustgate.yml          # The gate — BUILT, never executed on GitHub
 ├── render.yaml · Procfile · vercel.json   # Deploy config, written, never deployed
@@ -171,11 +171,11 @@ Tiers 1 and 2 fail in different ways, and that is the point. Tier 1 is **precise
 
 | Pattern | Where | Description |
 |---------|-------|-------------|
-| Protocol-based checker | `engine/app/checkers/base.py` | Every checker exposes the same async interface. Adding a sixth checker must not touch the orchestrator. |
-| Fan-out / fan-in | `engine/app/checkers/base.py` (`run_all`) | Checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. **Four exist, not five** — `deps` is not built. |
-| Deterministic adjudicator | `engine/app/adjudicator.py` | Pure function, no I/O, no LLM. Given the same findings it always returns the same verdict. Testable without network. |
-| Schema-at-the-boundary | `engine/app/llm/` + `checkers/semantic.py` | Pydantic validates every LLM response, and a finding whose evidence is not a verbatim quote from the diff is rejected outright. A malformed response becomes a checker *error*, never a silent finding. |
-| Run log | `engine/app/runlog.py` | One JSON record per checker per run under `runs/`, re-readable into a verdict. `input_hash` is a SHA-256 over the **run records**, not over verdict inputs. Append-only SQLite (`store.py`) is **NOT BUILT**, so there is no tamper-evidence. |
+| Protocol-based checker | `backend/app/checkers/base.py` | Every checker exposes the same async interface. Adding a sixth checker must not touch the orchestrator. |
+| Fan-out / fan-in | `backend/app/checkers/base.py` (`run_all`) | Checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. **Four exist, not five** — `deps` is not built. |
+| Deterministic adjudicator | `backend/app/adjudicator.py` | Pure function, no I/O, no LLM. Given the same findings it always returns the same verdict. Testable without network. |
+| Schema-at-the-boundary | `backend/app/llm/` + `checkers/semantic.py` | Pydantic validates every LLM response, and a finding whose evidence is not a verbatim quote from the diff is rejected outright. A malformed response becomes a checker *error*, never a silent finding. |
+| Run log | `backend/app/runlog.py` | One JSON record per checker per run under `runs/`, re-readable into a verdict. `input_hash` is a SHA-256 over the **run records**, not over verdict inputs. Append-only SQLite (`store.py`) is **NOT BUILT**, so there is no tamper-evidence. |
 
 ### File boundaries — hard rules
 
@@ -184,7 +184,7 @@ Tiers 1 and 2 fail in different ways, and that is the point. Tier 1 is **precise
   arrives, not into a package that exists to hold two handlers.
 - `adjudicator.py` **never** imports `llm/`. This is what makes it deterministic. If you need a model in the verdict path, the verdict is no longer reproducible — stop and reconsider the design.
 - `checkers/` modules **never** import each other. Checkers are independent experts; a checker that trusts another checker's opinion is no longer an independent signal.
-- `dashboard/` **never** calls a Groq key. All inference lives server-side in `engine/`.
+- `dashboard/` **never** calls a Groq key. All inference lives server-side in `backend/`.
 
 ---
 
@@ -204,7 +204,7 @@ Verdict color is the most important signal in the product. It is also the most c
 `UNKNOWN` exists because a checker that errored must never be silently rendered as clean.
 
 **`UNKNOWN` is a dashboard display state, not a fourth verdict.** The engine's verdict enum is
-exactly `PASS | REVIEW | BLOCK` (`engine/app/schemas.py`), and a run containing an incomplete
+exactly `PASS | REVIEW | BLOCK` (`backend/app/schemas.py`), and a run containing an incomplete
 checker yields `REVIEW` — per D5 below and `WEDGE.md`. The dashboard renders `UNKNOWN` when a
 `REVIEW` verdict carries degraded checkers, so the operator can see *why* it is not a pass.
 

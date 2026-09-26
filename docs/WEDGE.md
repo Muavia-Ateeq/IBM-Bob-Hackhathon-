@@ -42,12 +42,12 @@ Concretely, three things — none of which the four overlapping live submissions
    checker failed and why. Every competing gate either fails open (dangerous) or fails
    closed into a hard block (annoying, and users disable it). TrustGate fails to the only
    state that is honest.
-   **Built and tested** — `engine/app/adjudicator.py` and `engine/tests/test_adjudicator.py`.
+   **Built and tested** — `backend/app/adjudicator.py` and `backend/tests/test_adjudicator.py`.
 2. **Evidence on every finding, mechanically enforced.** File, line, and quoted source,
    asserted by the schema — not a convention. A finding without evidence is a rejected
    finding. An LLM's opinion is not a security finding; an LLM's opinion *with the code it
    is pointing at* is.
-   **Built and tested** — `engine/app/schemas.py` rejects a finding with `line < 1`, empty
+   **Built and tested** — `backend/app/schemas.py` rejects a finding with `line < 1`, empty
    evidence, or a traversing `file` path. Asserted in the same test file.
 3. **A measured false-positive rate with the harness that reproduces it in the repo.** Not
    "high accuracy". A number, the corpus it came from, and the command that regenerates it.

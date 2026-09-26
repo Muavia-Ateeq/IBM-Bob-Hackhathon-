@@ -171,6 +171,12 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     return application
 
 
+# Module-level ASGI app so `uvicorn app.main:app` works from the repo root and from
+# Render. build_app() is pure -- it constructs the FastAPI object and registers routes,
+# no I/O -- so calling it at import time is safe. The `--factory` form stays supported.
+app = build_app()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app", description="TrustGate verdict engine")
     parser.add_argument("--diff", type=Path, help="path to a unified diff to review")

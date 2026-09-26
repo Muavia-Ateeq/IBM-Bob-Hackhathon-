@@ -58,8 +58,8 @@ Two details that are easy to get wrong and are load-bearing:
   semantic checkers read the diff. Supplying only a diff scores the one
   deterministic checker at zero recall for a reason that is not its fault. This
   is the same class of bug the gate already had once, per `SYSTEM_LEDGER.md`.
-- **`cwd` must be `engine/`.** `app/main.py` imports `from app.checkers import …`,
-  so `engine/` has to be on `sys.path`; the workspace path is passed
+- **`cwd` must be `backend/`.** `app/main.py` imports `from app.checkers import …`,
+  so `backend/` has to be on `sys.path`; the workspace path is passed
   engine-relative.
 
 ## `PYTHONIOENCODING` is set for the subprocess — a real engine bug

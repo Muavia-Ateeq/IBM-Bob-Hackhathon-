@@ -5,9 +5,9 @@ describes what the engine actually writes today. Every claim below is traced to 
 where this document and the code disagree, the code is the contract and this file is the
 bug.
 
-- Models: [`engine/app/schemas.py`](engine/app/schemas.py)
-- Writer / reader: [`engine/app/runlog.py`](engine/app/runlog.py)
-- Verdict rules: [`engine/app/adjudicator.py`](engine/app/adjudicator.py)
+- Models: [`backend/app/schemas.py`](backend/app/schemas.py)
+- Writer / reader: [`backend/app/runlog.py`](backend/app/runlog.py)
+- Verdict rules: [`backend/app/adjudicator.py`](backend/app/adjudicator.py)
 
 ---
 
@@ -179,7 +179,7 @@ error.
 
 ## ⚠️ `runs/` is gitignored, and these files hold credential fragments
 
-`.gitignore:39` excludes `/engine/runs/`. That is deliberate: `Finding.evidence` is the
+`.gitignore:39` excludes `/backend/runs/`. That is deliberate: `Finding.evidence` is the
 literal matched text, and for the secrets checker that text **is a fragment of a real
 credential**.
 

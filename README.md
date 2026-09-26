@@ -19,7 +19,7 @@ online · September 25–27 2026
 ```bash
 git clone <repo-url>                 # replace with this repository's URL
 cd <this repository's folder>   # it is `IBM BOB Hackathon` — spaces, no hyphens
-cd engine
+cd backend
 python -m venv .venv
 .venv\Scripts\activate                # source .venv/bin/activate on macOS or Linux
 pip install -r requirements.txt
@@ -27,8 +27,8 @@ python app/main.py --serve
 curl http://127.0.0.1:8000/api/health # {"ok":true}
 ```
 
-`engine/` has no `__init__.py` or `pyproject.toml`, so every command above runs from inside
-`engine/` — that is a known gap (`SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
+`backend/` has no `__init__.py` or `pyproject.toml`, so every command above runs from inside
+`backend/` — that is a known gap (`SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
 
 ```bash
 python app/main.py --diff samples/example.diff --pr 42      # run the engine
@@ -39,7 +39,7 @@ python integration_test.py --pr 42                         # four-check smoke te
 ## Run it
 
 ```bash
-cd engine
+cd backend
 pip install -r requirements.txt          # once
 
 # with GROQ_API_KEY set — real verdicts from the semantic checkers
@@ -55,7 +55,7 @@ python app/main.py --serve               # then: curl localhost:8000/api/health
 python -m app.runlog --pr 42 --runs-dir runs
 
 # the tests
-python -m pytest tests/ -v               # 76 passing
+python -m pytest tests/ -v               # 81 passing
 ```
 
 `samples/example.diff` is a small PR carrying a SQL injection, a missing-authorization gap, and a
@@ -185,15 +185,15 @@ Five are planned; four are built, and **none of the four has ever produced a rea
 
 | Checker | What it detects | Tier | Method | Status |
 |---------|-----------------|------|--------|--------|
-| `secrets` | Hardcoded credentials, API keys, private keys | 1 | Gitleaks, deterministic | built — has run, but only ever failed: the binary is at `engine/.tools/gitleaks.exe` and not on `PATH` (K14) |
+| `secrets` | Hardcoded credentials, API keys, private keys | 1 | Gitleaks, deterministic | built — has run, but only ever failed: the binary is at `backend/.tools/gitleaks.exe` and not on `PATH` (K14) |
 | `authz` | Missing authorization, IDOR, privilege escalation | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `injection` | SQL/command injection, XSS, SSRF, unsafe deserialization | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `business` | Business-logic flaws, race conditions, crypto misuse | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `deps` | Known CVEs in Python and npm dependencies | 1 | OSV-Scanner, deterministic | **not built** — blocked, see K13 |
 
-Every checker implements one interface (`engine/app/checkers/base.py`), so adding a sixth must
+Every checker implements one interface (`backend/app/checkers/base.py`), so adding a sixth must
 not require touching the orchestrator. The contract each checker author follows is in
-[`engine/app/checkers/CONTRIBUTING.md`](engine/app/checkers/CONTRIBUTING.md).
+[`backend/app/checkers/CONTRIBUTING.md`](backend/app/checkers/CONTRIBUTING.md).
 
 Because no checker has run live, **every verdict a reviewer can produce today is `REVIEW`** —
 `BLOCK` and a clean `PASS` are not currently demonstrable. That is a consequence of two
@@ -208,7 +208,7 @@ in the ledger's Next Actions.
 | Inference | Groq (`openai/gpt-oss-120b`, strict JSON-schema mode) | **built**, unverified against a live call — no API key in this environment |
 | Dashboard | React · Vite · TypeScript | **not built** |
 | Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built**, never executed — the workflow has not been run on GitHub |
-| Secret scanner | Gitleaks (`secrets`) | **built**, unverified — the binary is present and works (`engine/.tools/gitleaks.exe`, v8.30.1) but is not on `PATH`; set `GITLEAKS_BIN` to its full path |
+| Secret scanner | Gitleaks (`secrets`) | **built**, unverified — the binary is present and works (`backend/.tools/gitleaks.exe`, v8.30.1) but is not on `PATH`; set `GITLEAKS_BIN` to its full path |
 | Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `SYSTEM_LEDGER.md` K13 |
 | Run log | `runs/*.json` + `app.runlog` | **built** |
 | Deploy config | `render.yaml` · `Procfile` · `vercel.json` | **written, never deployed** |
@@ -226,20 +226,23 @@ checker design, are in [`AI_CONTEXT.md`](AI_CONTEXT.md).
 
 | Path | Contents |
 |------|----------|
-| `AI_CONTEXT.md` | The constitution — identity, architecture, rules, model strategy |
-| `PROJECT_ROADMAP.md` | Phases, milestones, success metrics |
-| `SYSTEM_LEDGER.md` | Session-to-session memory |
-| `WEDGE.md` | The positioning, the demo, and the claims that can be falsified |
-| `AGENTS.md` | Agent rules, read by every AI tool in the loop |
+| `docs/AI_CONTEXT.md` | The constitution — identity, architecture, rules, model strategy |
+| `docs/PROJECT_ROADMAP.md` | Phases, milestones, success metrics |
+| `docs/SYSTEM_LEDGER.md` | Session-to-session memory |
+| `docs/WEDGE.md` | The positioning, the demo, and the claims that can be falsified |
+| `docs/CONTRACT.md` | The HTTP surface the dashboard and the gate both depend on |
+| `docs/AGENTS.md` | Agent rules, read by every AI tool in the loop |
+| `AGENTS.md` | Root pointer to `docs/AGENTS.md`, so tools that load from the root still find the rules |
 | `.bob/rules/` | The same rules, in IBM Bob's native format |
-| `engine/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
-| `engine/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
-| `engine/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
-| `engine/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, and integration tests — 76 passing |
-| `engine/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
-| `engine/requirements.txt` | The pinned installed set |
+| `backend/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
+| `backend/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
+| `backend/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
+| `backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, and integration tests — 81 passing |
+| `backend/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
+| `backend/requirements.txt` | The pinned installed set |
 | `.github/workflows/trustgate.yml` | The gate — runs the engine on every PR, uploads SARIF, fails the run on `BLOCK` |
-| `dashboard/` | React/Vite UI — **not built** |
+| `render.yaml`, `Procfile` | Deploy config for `trustgate-api` on Render |
+| `screenshots/` | Demo images for the README — **empty** |
 | `demo_target/` | Labelled corpus, one planted defect per case — **built, never run against a live checker** |
 | `bench/` | Ground truth (`cases.json`) and the measurement runner — **built; reports `INCOMPLETE`** |
 
@@ -299,9 +302,9 @@ in the one document judges read.
 
 | # | Member | Workstream | Focus |
 |---|--------|------------|-------|
-| A | _unassigned_ | `engine/app/llm/` | Groq client, strict schema enforcement, retry, cache-by-input-hash |
-| B | _unassigned_ | `engine/app/checkers/` | The checkers and `base.py` |
-| C | _unassigned_ | `engine/app/adjudicator.py`, `schemas.py`, `tests/` | The verdict path and the proof |
+| A | _unassigned_ | `backend/app/llm/` | Groq client, strict schema enforcement, retry, cache-by-input-hash |
+| B | _unassigned_ | `backend/app/checkers/` | The checkers and `base.py` |
+| C | _unassigned_ | `backend/app/adjudicator.py`, `schemas.py`, `tests/` | The verdict path and the proof |
 | D | _unassigned_ | `.github/workflows/`, `sarif.py` | The gate and the Code Scanning upload |
 | E | _unassigned_ | `dashboard/` | React/Vite UI — **not started** |
 | F | _unassigned_ | `demo_target/` + `bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12/K14** |
