@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hmac
 import sys
 import time
 from collections import Counter
@@ -29,7 +30,7 @@ from app.config import Settings, __version__, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
 from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, write_run_records
 from app.sarif import write_sarif
-from app.schemas import CheckerResult, CheckerStatus, Verdict
+from app.schemas import CheckerResult, CheckerStatus, RunRecord, Verdict
 
 CHECKER_MODULES = (
     secrets,
@@ -147,10 +148,11 @@ async def analyze(
 
 
 def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, Header, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
 
     runs_dir.mkdir(parents=True, exist_ok=True)
+    settings = load_settings()
 
     application = FastAPI(title="TrustGate", version=__version__)
     application.add_middleware(
@@ -163,6 +165,39 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     @application.get("/api/health")
     async def health() -> dict[str, bool]:
         return {"ok": True}
+
+    # The gate writes run records into the Actions runner's disk, which Render never sees, so
+    # the deployed instance reads an empty directory forever. This is the only way records get
+    # there.
+    #
+    # The token is the entire trust boundary: this app allows every origin, so without it any
+    # page in any browser could write a finding into the demo. An unconfigured instance answers
+    # 503 rather than accepting everything, so a missing secret fails closed.
+    #
+    # Every record is validated against RunRecord before it is written, so a caller cannot land
+    # a file the reader would later drop as unreadable. See the path-safety note in runlog.
+    @application.post("/api/runs")
+    def ingest(
+        payload: list[RunRecord],
+        x_trustgate_token: str = Header(default=""),
+    ) -> dict[str, int | bool]:
+        if not settings.ingest_token:
+            raise HTTPException(
+                status_code=503, detail="ingest is not configured on this instance"
+            )
+        if not hmac.compare_digest(x_trustgate_token, settings.ingest_token):
+            raise HTTPException(status_code=401, detail="invalid ingest token")
+        written: list[Path] = []
+        for record in payload:
+            try:
+                written.extend(
+                    write_run_records(
+                        [record.result], record.pr, record.run_id, runs_dir
+                    )
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"received": len(payload), "written": len(written)}
 
     # Every run record on disk, newest last. `def`, not `async def`, for the same reason as
     # `pr_verdict` below: the glob and the file reads run in the threadpool.

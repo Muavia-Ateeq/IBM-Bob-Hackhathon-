@@ -187,6 +187,35 @@ error.
 
 ---
 
+## Ingest — `POST /api/runs`
+
+The engine writes records into the disk of whatever machine ran it, which for CI is a
+throwaway Actions runner. A deployed instance therefore reads an **empty directory forever**
+and the dashboard shows nothing. `POST /api/runs` is the only path records take to a server.
+
+- **Auth**: `X-TrustGate-Token` must equal `TRUSTGATE_INGEST_TOKEN`. Compared with
+  `hmac.compare_digest`. An instance where that env var is unset answers **503** and accepts
+  nothing — a missing secret fails closed rather than open.
+- **Body**: a JSON array of `RunRecord`, validated by the model before anything is written. A
+  record that does not parse is a **422** and nothing is written; the reader can never be handed
+  a file it would later drop as unreadable.
+- **Writes**: one file per record, `{run_id}_{checker}.json`, via the same `write_run_records`
+  the CLI uses. `run_id` and `checker` are matched against `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`
+  before they are joined into a filename — a `run_id` of `../../../escaped` is a **422**, not a
+  write outside `runs/`.
+- **Not a verdict endpoint.** It stores records; `/api/pr/{pr}/verdict` is still the only thing
+  that produces one.
+
+`ponytail: records live on Render's ephemeral disk, so a container restart empties the
+instance and the dashboard goes blank until the next run publishes again. Attach a persistent
+disk (Render dashboard, or a `disk:` block in `render.yaml`) if the history must survive
+restarts.`
+
+CORS still allows every origin, so the token is the *only* thing protecting a write route on a
+public instance. Tighten `allow_origins` before pointing this at anything real.
+
+---
+
 ## ⚠️ `runs/` is gitignored, and these files hold credential fragments
 
 `.gitignore:39` excludes `/backend/runs/`. That is deliberate: `Finding.evidence` is the
