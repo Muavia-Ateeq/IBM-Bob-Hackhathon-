@@ -1,0 +1,25 @@
+{
+  "run_id": "run_20260926_151000",
+  "pr": "issue-09-weak-hash",
+  "written_at": "2026-09-26T15:10:00+05:00",
+  "result": {
+    "checker": "spec_conformance",
+    "tier": "semantic",
+    "status": "ok",
+    "findings": [
+      {
+        "checker": "spec_conformance",
+        "severity": "high",
+        "title": "req_password_hash violated: PBKDF2 replaced with unsalted MD5",
+        "detail": "PRD requires strong password hashing but code uses MD5 with no salt — one pass, cryptographically weak.",
+        "file": "crypto.py",
+        "line": 7,
+        "evidence": "return hashlib.md5(password.encode(\"utf-8\")).hexdigest()",
+        "cwe": "CWE-916",
+        "remediation": "Restore PBKDF2-HMAC-SHA256 with per-user salt and constant-time compare."
+      }
+    ],
+    "duration_ms": 52000,
+    "error": null
+  }
+}

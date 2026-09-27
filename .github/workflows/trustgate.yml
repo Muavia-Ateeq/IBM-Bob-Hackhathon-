@@ -56,7 +56,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install engine dependencies
-        run: python -m pip install -r backend/requirements.txt
+        run: python -m pip install -r trustgate/backend/requirements.txt
 
       # Optional, but not `continue-on-error`: a failed DOWNLOAD warns and steps aside so the
       # secrets checker degrades to REVIEW, which is the designed behaviour. A checksum
@@ -110,18 +110,24 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GITLEAKS_BIN: gitleaks
+          # Suppress the two deliberately-planted fake secrets (.github/gitleaks.toml).
+          # Scoped to this step on purpose so bench/ keeps detecting the corpus fixture.
+          # Absolute: the run block below does `cd trustgate/backend` before gitleaks starts.
+          # The allowlist paths inside it are relative to the scan target, which is
+          # `--workspace ..` == trustgate/, so they still match after the folder restructure.
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.github/gitleaks.toml
         run: |
           set -uo pipefail
-          cd backend
+          cd trustgate/backend
           python app/main.py \
-            --diff ../pr.diff \
+            --diff ../../pr.diff \
             --pr "${{ github.event.pull_request.number || 'dispatch' }}" \
             --workspace .. \
             --runs-dir runs \
-            --sarif ../trustgate.sarif | tee ../verdict.txt
+            --sarif ../../trustgate.sarif | tee ../../verdict.txt
           engine_status=${PIPESTATUS[0]}
           echo "engine exit status: ${engine_status}"
-          if [ ! -s ../verdict.txt ]; then
+          if [ ! -s ../../verdict.txt ]; then
             echo "::error::engine produced no verdict (exit ${engine_status}); a crash is not a pass"
             exit 1
           fi
@@ -129,7 +135,7 @@ jobs:
             echo '## TrustGate'
             echo
             echo '```'
-            cat ../verdict.txt
+            cat ../../verdict.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -11,7 +11,7 @@ venv/
 # Node
 node_modules/
 dist/
-/build/
+/trustgate/build/
 .vite/
 *.tsbuildinfo
 
@@ -36,12 +36,12 @@ corpus/results/
 # Run records — the same reason as *.sarif above. Each runs/<run_id>_<checker>.json carries a
 # Finding.evidence verbatim, and for the secrets checker that quote is a matched credential
 # fragment. Anchored to backend/ so a source directory named runs/ elsewhere is still tracked.
-/backend/runs/
+/trustgate/backend/runs/
 
 # Pinned scanner binaries, fetched and checksum-verified locally, never committed.
 # A vendored 8MB executable from a third-party release is not something a source repo should
 # carry, and an unverified one is worse than none. See SYSTEM_LEDGER.md K14 for the fetch steps.
-/backend/.tools/
+/trustgate/backend/.tools/
 
 # Local databases
 # Anchored to the repo root on purpose. An unanchored `data/` matches at ANY depth and would
@@ -49,7 +49,7 @@ corpus/results/
 # kind of directory this project will grow, and it would vanish with no error.
 *.db
 *.sqlite3
-/data/
+/trustgate/data/
 
 # Verification artifacts that must be regenerated, not committed
 verification/

@@ -1,6 +1,6 @@
 # TrustGate — agent rules pointer
 
-**The rules that govern this repo live at [`docs/AGENTS.md`](docs/AGENTS.md).**
+**The rules that govern this repo live at [`trustgate/docs/AGENTS.md`](trustgate/docs/AGENTS.md).**
 
 Read that file in full before doing any work. It is the portable spine: Authenticity,
 Planning Governance, Session Management, Scope Control, Code Standards, Git, CI Landmines

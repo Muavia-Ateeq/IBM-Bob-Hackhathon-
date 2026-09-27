@@ -1,0 +1,59 @@
+# Gitleaks config for the CI gate ONLY. It is not at the scan target path
+# (trustgate/, since the engine is run with --workspace .. from trustgate/backend)
+# on purpose: gitleaks auto-discovers "(target path)/.gitleaks.toml",
+# and a config there would also silence bench/run_benchmark.py -- which must keep
+# detecting demo_target/issue-02-hardcoded-key, the corpus's one deterministic case
+# (bench/cases.json, expected_checker: secrets, expected_line: 5).
+# The gate opts in explicitly via GITLEAKS_CONFIG in .github/workflows/trustgate.yml.
+#
+# useDefault keeps gitleaks' full default ruleset active. Without it this file would
+# carry no [[rules]] and the secrets gate would silently detect nothing.
+# VERIFIED against trustgate/backend/.tools/gitleaks.exe v8.30.1 on 2026-09-27.
+#
+# The `^` anchor was WRONG here and the gate was red because of it. The scan target is
+# passed as a relative path (`--workspace ..`), and gitleaks reports a finding as
+# `<target exactly as typed>/<path inside it>` — so the real strings are
+# `../backend/tests/test_secrets.py` and `../demo_target/issue-02-hardcoded-key/config.py`.
+# A `^backend/...` regex cannot match a string starting `../`, so the allowlist matched
+# NOTHING, the engine found TrustGate's own planted fakes, returned BLOCK, and both
+# GitHub Actions runs went red (2026-09-26). The earlier note here claimed the allowlist
+# was verified: it had only been checked with a deliberately NON-matching path, which
+# of course still reported. Hence `(^|/)` below — unanchored on the left, still exact
+# on the right. Do not "tidy" the `^` back in.
+#
+# The paths use ''' literal strings, not """. In a TOML basic string a backslash-dot
+# is an invalid escape and gitleaks refuses to start with
+# "invalid escaped character U+002E '.'" -- which fails closed, but takes the gate
+# down with it.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "TrustGate's own deliberately-planted fake secrets"
+paths = [
+  # bench/cases.json case issue-02-hardcoded-key, expected_checker: secrets,
+  # expected_line: 5, disputed: false. A real-looking session key, planted so the
+  # deterministic checker has something to find. Suppressed for the gate only.
+  '''(^|/)demo_target/issue-02-hardcoded-key/config\.py$''',
+  # A synthetic gitleaks report entry. The fake key is the input to
+  # test_the_secret_itself_never_reaches_the_finding, which is the regression test
+  # proving the engine cannot leak a credential.
+  '''(^|/)backend/tests/test_secrets\.py$''',
+  # The third finding in the same local reproduction:
+  # `backend/tests/__pycache__/test_secrets.cpython-314-pytest-9.1.1.pyc` -- the SAME
+  # planted fake key already allowlisted above, compiled. Not a second secret: a derived
+  # copy of the first. It is a build artifact that no test run in CI can avoid producing,
+  # so leaving it out keeps the gate red for a reason no human introduced.
+  #
+  # Deliberately ONE file, not the `__pycache__/` directory and not `\.pyc$`. The tree
+  # holds 1500+ `.pyc` files (mostly under `.venv/`) and every one of them stays
+  # scanned. An allowlist is a statement about a specific known artifact; a
+  # directory-wide pattern would be a blanket exemption wearing a specific one's name.
+  # The `.*` covers the tag CPython appends, which embeds the interpreter AND the pytest
+  # version, so it differs on the CI runner.
+  # UNVERIFIED: the re-scan confirming this matches the engine's actual reported path was
+  # blocked by the tool permission layer this session. The path above was read off the
+  # real tree with Glob; the first PR after this commit is the check.
+  '''(^|/)backend/tests/__pycache__/test_secrets\..*\.pyc$''',
+]
