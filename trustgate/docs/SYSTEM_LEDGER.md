@@ -415,22 +415,10 @@ that produced the wrong call still has it, which is the point of keeping it.
 
 ## Next Actions
 
-**In order. Item 1 is a Tier 3 decision and blocks a truthful close-out.**
+**In order. Item 1 is done; what remains is items 4, 5, 7 and 8.**
 
-1. **Open one pull request from a same-repo branch. This is now the only item that matters.**
-   It closes K20 (gate goes green), it is the first run with `GROQ_API_KEY` reachable from
-   Actions (K12), and it is the cheapest thing on this list. The allowlist now covers all
-   three findings from the local reproduction — the two planted fakes and the `.pyc` that
-   compiles one of them. **K10 no longer blocks anything:** both rule files were corrected
-   2026-09-27 and now describe the tree that exists. The `PROJECT_ROADMAP.md` phase label is
-   still stale and still a Tier 3 team call, but it is a documentation defect, not a
-   workstopper
-2. **Merge PR #1 and PR #2 only after the gate is green.** Deliberately sequenced by the
-   user on 2026-09-27, and it is the right order: both branches are already covered by red
-   runs, and merging into a red gate makes the badge indistinguishable from "we broke it."
-   Once a green run exists, PR #2 (the dashboard — built, `npm run build` green, **not
-   deployed**) and PR #1
-   (`prompt_injection`, reusing `SemanticChecker`) are both low-risk merges
+1. ~~**Open one pull request from a same-repo branch. This is now the only item that matters.**~~ **DONE 2026-09-27.** PR #6 (`fix/bench-and-ci`) is open against `main` and **green**: run `36317931615` completed `success` on `249cc81`, with both the `tests` job (110 passing) and the `gate` job's nine steps succeeding. This closes K20 and K27. It is the first run with repository secrets in reach, and **K12 is still unresolved** — the six semantic checkers degraded rather than reaching a live provider. A green run and a real verdict are different claims, and only the first is proven
+2. ~~**Merge PR #1 and PR #2 only after the gate is green.**~~ **DONE 2026-09-27**, in the order the user set. Both PRs' code was verified present in `fix/bench-and-ci` file-by-file *before* anything was closed — 3 files for PR #1, 23 for PR #2 — and both were then closed as superseded rather than merged, so no teammate's work is duplicated. Credit preserved in a comment on each. **The dashboard is built and integrated, not deployed**, and `vercel.json` is unmodified
 3. ~~**Resolve K10**~~ **Closed as a workstopper 2026-09-27**, see item 1. The phase *label*
    in `PROJECT_ROADMAP.md` is still wrong and still needs a team decision — that is a
    five-minute edit nobody has made, not a blocker
@@ -458,9 +446,14 @@ that produced the wrong call still has it, which is the point of keeping it.
 8. **Test the network path.** `run_all`'s timeout branch and the `GroqProvider` response
    parsing are unexercised. `StaticProvider` covers `SemanticChecker` end to end
    (`test_semantic.py`) but not a malformed or slow real response. This needs a key (item 2)
-9. **`store.py`, `deps.py`, and `dashboard/` stay unbuilt.** `deps.py` is blocked on K13 above.
+9. **`store.py` and `deps.py` stay unbuilt.** `deps.py` is blocked on K13 above. **`dashboard/` is off this list** — it exists, is integrated, and is not deployed
    The dashboard is the one thing judges will forgive, and it is the most expensive thing on
    the list
+10. **Fix `vercel.json`'s `VITE_API_URL` before anyone deploys the dashboard.** It is
+   hardcoded to `http://localhost:8000`, so a deployment as it stands has every visitor's
+   browser call their own machine and render nothing. **This is the frontend owner's call, not
+   an agent's** — `vercel.json` is deliberately untouched by this project. The live API is
+   `https://trustgate-api-ehib.onrender.com`
 
 ### Closed — 2026-09-26 session
 
@@ -583,15 +576,30 @@ five named components, and instructions to move `AGENTS.md`, `AI_CONTEXT.md`,
 
 ### Next session must pick up first
 
+> **Session state: 2026-09-27, close-out. The tree is CLEAN.** `git status --porcelain`
+> returns nothing, and `HEAD` equals `origin/fix/bench-and-ci` at `249cc81`. The three
+> untracked scratch files that dirtied it (`mi3.txt`, `sch.txt`, a 0-byte
+> `trustgate/backend/README.md`) are deleted. **PR #6 is open against `main` and green.**
+> Do not re-derive any of this — read `gh pr list` if you need to confirm it.
+>
 > Read `AI_CONTEXT.md`, `PROJECT_ROADMAP.md`, and `SYSTEM_LEDGER.md`. **Note that application
-> code already exists under `backend/app/` — do not rebuild it.** The first action is item 1
-> above: the K10 phase-scope decision, which is Tier 3 and belongs to the team, not an agent.
-> **The tree is dirty — review `git status` before anything else.** Then item 2:
-> a `WATSONX_API_KEY` or a `GROQ_API_KEY` is the missing credential, and either one turns
-> a plausible product into a demonstrated one. The gitleaks binary was downloaded,
-> checksum-verified **and executed** on 2026-09-26 (K14) — it is no longer a blocker and
-> needs no authorisation. Item 3 (the K13 `deps.py` schema decision) is the cheapest thing on
-> the list that only the team can unblock.
+> code already exists under `trustgate/backend/app/` — do not rebuild it.**
+>
+> **What actually matters next, in order:**
+>
+> 1. **A credential (K12, and K25 for IBM).** This is the single largest unverified claim in
+>    the repository. The gate runs green, but it runs green *with every semantic checker
+>    degraded* — no `WATSONX_API_KEY` and no `GROQ_API_KEY` have been observed in the Actions
+>    environment. `UNVERIFIED — read a gate job summary: a checker line reading `authz ok`
+>    rather than `DEGRADED … ProviderUnavailable` is the proof`
+> 2. **Merge PR #6.** It is green and mergeable. Everything in it is already verified.
+> 3. **K13 — the `deps.py` line-number question.** The only thing between D3 and completion,
+>    and a schema decision, so it is the team's. Item 4 above.
+> 4. **Tell the frontend owner that `vercel.json` hardcodes `localhost:8000`** (item 10). A
+>    deployment as it stands renders empty for every visitor. Not an agent's file to change.
+>
+> The gitleaks binary is downloaded, checksum-verified **and executed** (K14) — not a
+> blocker, and it needs no authorisation.
 >
 > **`backend/app/comment.py` has never posted anything.** It has been run with `--dry-run`
 > against real run records and its markdown was inspected, but no API call has been made, so
@@ -600,6 +608,10 @@ five named components, and instructions to move `AGENTS.md`, `AI_CONTEXT.md`,
 > **Do not reintroduce** the 5/2/1 score, the `forced_block` substring rule, a `PASS` on an
 > empty `runs/` directory, the two live-demo URLs, or the five invented checker names. All were
 > specified in the pasted prompts and all were declined on the record, above.
+>
+> **Do not rewrite the CI history.** Five gate runs failed before `a04438b` and the two after
+> it are green. That sequence is the record of a real bug caught and fixed, and deleting the
+> red half would be the one edit that makes this ledger worthless.
 
 ---
 

@@ -170,6 +170,21 @@ optional is strictly better than submitting at T+48h and having a broken build.*
 > **M5 is not met.** 5 of the 7 checkers produce findings on the corpus; `security_reviewer`
 > and `spec_conformance` are named by no case in `bench/cases.json` and are therefore
 > unmeasured. The roster is 7 — one deterministic (`secrets`), six semantic.
+>
+> **M6 is now met, in two halves.** The workflow runs on a real pull request and is green:
+> runs `36317034453` (PR #6) and `36311839360` (PR #5) both completed `success` on
+> 2026-09-27, and the SARIF upload step succeeded inside `36317931615`. **The second half is
+> not verified** — "SARIF visible in the Security tab" means Code Scanning *accepted* the
+> report and rendered alerts, which is a different claim from the upload step succeeding.
+> `UNVERIFIED — open the Code Scanning tab on the default branch and confirm alerts render`
+>
+> **M4 is not met.** The gate runs and renders a verdict, but no run has yet reached a live
+> provider: the six semantic checkers degrade to `REVIEW` because no `WATSONX_API_KEY` and
+> no `GROQ_API_KEY` have been observed in the Actions environment. A verdict has been
+> rendered end to end; a *real* one has not. `UNVERIFIED — read a `tests`/gate job summary for
+> an `authz ok` line rather than `DEGRADED … ProviderUnavailable``
+>
+> **M7 is not met** and no number is published that is not traced to a recorded run.
 
 ---
 
