@@ -11,20 +11,23 @@ from app.llm.client import Provider
 from app.schemas import CheckerTier
 
 FOCUS = """
-Security review. Look for:
-1. HARDCODED SECRETS: API keys, passwords, tokens, or credentials written directly in source
-   code instead of loaded from environment variables or a secrets manager.
-2. SQL INJECTION: SQL queries built using string concatenation or f-strings with variables
-   that come from user input, instead of parameterized queries.
-3. MISSING AUTH: An endpoint that performs sensitive actions (admin actions, data modification,
-   access to another user's data) with no visible authentication or authorization check.
-4. UNSAFE DESERIALIZATION: Use of pickle.loads, yaml.load (without SafeLoader), eval, or exec
-   on data that originates from a request or external input.
-5. DEBUG MODE IN PRODUCTION: Configuration that leaves debug mode, verbose error pages, or
-   development flags enabled in a production config file.
+Dangerous runtime configuration left on in production. Look for exactly one class of issue:
 
-Only report issues that fall into one of these five categories. Do not report style,
-naming, or architecture opinions.
+DEBUG MODE IN PRODUCTION: A configuration file, settings module, or application factory that
+sets a debug flag, verbose error mode, or development-only feature to True (or an equivalent
+truthy value) in a context that will run in production — for example Flask DEBUG=True,
+Django DEBUG=True, FastAPI reload=True, or a custom DEVELOPMENT=True flag in a config file
+that is not gated behind an environment variable check.
+
+Do NOT report any of the following — they are owned by other checkers in this pipeline:
+- Hardcoded secrets, API keys, or credentials → owned by the secrets checker
+- SQL injection or any other injection → owned by the injection checker
+- Missing authentication or authorization → owned by the authz checker
+- Unsafe deserialization (pickle, yaml.load) → owned by the injection checker
+- Weak cryptography or hash functions → owned by the business checker
+
+If the diff does not contain a production debug/verbose configuration being enabled,
+return an empty findings array. Do not invent an issue.
 """.strip()
 
 
