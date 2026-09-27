@@ -10,6 +10,19 @@ The four checks:
 3. Does the verdict endpoint answer, and with what verdict?
 4. Is the gate still carrying the properties that make it a gate?
 
+Checks 2 and 3 must read the same data or they can never agree: check 2 is a local
+filesystem read, check 3 is HTTP. Both resolve to `trustgate/backend/runs` — this file
+computes it from `REPO_ROOT`, and the engine's `DEFAULT_RUNS_DIR` is anchored to the
+package rather than the working directory — so `python app/main.py --serve` finds the same
+records from any directory.
+
+The `--base-url` default is that local server for exactly this reason. Do not point it at
+the deployed instance: that service is read-only over an empty directory by design, not a
+broken deployment (see SYSTEM_LEDGER.md), and it will 404 for any pull request.
+
+`runs/` is gitignored run output. It used to default to a CWD-relative `Path("runs")`, which
+silently pointed at nothing whenever the caller was not standing in `trustgate/backend`.
+
 Check 2 validates against `app.schemas.RunRecord`, which is the actual contract. The field
 list these checks were originally specified with — `run_id, agent, member, pr, findings,
 status` — is a schema this project never built; checking against an invented second schema
@@ -37,15 +50,22 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# The status marks below are not ASCII, and a Windows console still defaults stdout to cp1252,
+# which raises UnicodeEncodeError on the first check rather than printing it. Same guard as
+# app/main.py.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 from pydantic import ValidationError
 
-from app.runlog import DEFAULT_RUNS_DIR
 from app.schemas import RunRecord, Verdict
 
 # The repo root, not trustgate/: this file is trustgate/backend/integration_test.py, and the one
 # thing REPO_ROOT is used for is locating .github/workflows/trustgate.yml, which stays at the
 # repo root because that is the only place GitHub reads workflows from.
 REPO_ROOT = Path(__file__).resolve().parents[2]
+RUNS_DIR = REPO_ROOT / "trustgate" / "backend" / "runs"
 SHA_PIN = re.compile(r"^[0-9a-f]{40}$")
 
 # Built once at import. `urlopen` constructs a fresh opener per call, and on Windows that
@@ -162,8 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     # server binds IPv4 only, so every request pays a refused connection before the
     # fallback. Both spellings work; the default is the one that reports honestly.
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--pr", default="issue-02-hardcoded-key")
-    parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
+    parser.add_argument("--pr", default="42")
+    parser.add_argument("--runs-dir", type=Path, default=RUNS_DIR)
     parser.add_argument("--workflow", type=Path, default=REPO_ROOT / ".github/workflows/trustgate.yml")
     args = parser.parse_args(argv)
 

@@ -43,6 +43,11 @@ corpus/results/
 # whose implementation only raised NotImplementedError — a run that could not have happened.
 /trustgate/runs/
 
+# Same records, written by the live-demo runs via `--runs-dir .live-runs`. Untracked and
+# NOT covered by the rules above, so a `git add .` would commit them — including a 11.5KB
+# gitleaks findings dump of exactly the credential fragments the rules above exist to keep out.
+/trustgate/backend/.live-runs/
+
 # Pinned scanner binaries, fetched and checksum-verified locally, never committed.
 # A vendored 8MB executable from a third-party release is not something a source repo should
 # carry, and an unverified one is worse than none. See SYSTEM_LEDGER.md K14 for the fetch steps.

@@ -150,6 +150,8 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
 
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
     application = FastAPI(title="TrustGate", version=__version__)
     application.add_middleware(
         CORSMiddleware,
@@ -183,20 +185,33 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     #
     # `pr` arrives as a path segment, so an identifier containing `/` or `#` must arrive
     # percent-encoded. The gate writes a bare pull-request number, which needs neither.
+    #
+    # A pull request with no record on disk has not been scanned, and `adjudicate` turns an
+    # empty result set into REVIEW/"no checkers ran" -- a 200 carrying a security verdict for
+    # a run that never happened, byte-identical to a real clean scan. The HTTP API cannot
+    # produce a verdict, only report one, so "nothing recorded" stays a 404. See
+    # SYSTEM_LEDGER.md on why the deployed instance reads an empty directory by design.
     @application.get("/api/pr/{pr}/verdict")
     def pr_verdict(pr: str) -> dict:
         try:
             record = compute_verdict(pr, runs_dir)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not record.results:
+            raise HTTPException(
+                status_code=404,
+                detail=f"no run records for pr {pr!r} in {runs_dir}",
+            )
         return {"pr": pr, **record.model_dump(mode="json")}
 
     return application
 
 
 # Module-level ASGI app so `uvicorn app.main:app` works from the repo root and from
-# Render. build_app() is pure -- it constructs the FastAPI object and registers routes,
-# no I/O -- so calling it at import time is safe. The `--factory` form stays supported.
+# Render. build_app() does one I/O call -- it creates the runs directory -- and that is
+# the same directory write_run_records already performs, so importing this module cannot
+# fail on a machine where the served app would not have started anyway. The `--factory`
+# form stays supported.
 app = build_app()
 
 
