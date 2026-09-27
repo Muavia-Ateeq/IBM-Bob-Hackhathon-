@@ -177,6 +177,56 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The engine wrote its records into this runner's disk, which the deployed instance
+      # never sees, so the live dashboard shows nothing without this. `if: always()` because
+      # a BLOCK exits non-zero and must still publish what it found.
+      #
+      # The destination is a literal, not a variable, on purpose. These records carry
+      # Finding.evidence, and for the secrets checker that text is a fragment of a real
+      # credential -- the reason runs/ is gitignored. A destination read from configuration
+      # could be repointed at anything; a literal can only ever be this project's own API,
+      # which is the same URL the dashboard is already built against.
+      #
+      # Never echo the token, and never let a non-2xx fail the gate: a publish failure is a
+      # dashboard gap, not a verdict change, and it must not block the merge on its own.
+      - name: Publish run records to the API
+        if: always()
+        env:
+          TRUSTGATE_INGEST_TOKEN: ${{ secrets.TRUSTGATE_INGEST_TOKEN }}
+        run: |
+          set -uo pipefail
+          API_URL="https://trustgate-api-ehib.onrender.com"
+          if [ -z "${TRUSTGATE_INGEST_TOKEN}" ]; then
+            echo "::warning::TRUSTGATE_INGEST_TOKEN not set; live dashboard stays empty"
+            exit 0
+          fi
+          python - <<'PY'
+          import json, os, pathlib, urllib.error, urllib.request
+
+          api_url = "https://trustgate-api-ehib.onrender.com"
+          directory = pathlib.Path("trustgate/backend/runs")
+          records = [json.loads(p.read_text()) for p in sorted(directory.glob("*.json"))]
+          if not records:
+              print("no run records to publish")
+              raise SystemExit(0)
+          request = urllib.request.Request(
+              api_url + "/api/runs",
+              data=json.dumps(records).encode(),
+              headers={
+                  "Content-Type": "application/json",
+                  "X-TrustGate-Token": os.environ["TRUSTGATE_INGEST_TOKEN"],
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  print(f"published {response.status}: {response.read().decode()[:200]}")
+          except urllib.error.HTTPError as error:
+              print(f"::warning::ingest returned {error.code}: {error.read().decode()[:200]}")
+          except urllib.error.URLError as error:
+              print(f"::warning::could not reach the API: {error.reason}")
+          PY
+
       # if: always() is not optional. A BLOCK exits non-zero, and without this the step is
       # skipped — the findings the run just produced silently vanish, which is the exact
       # failure mode a security gate must not have.

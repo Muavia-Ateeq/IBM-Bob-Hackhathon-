@@ -48,6 +48,7 @@ class Settings:
     database_path: str
     price_per_1k_input_usd: float
     price_per_1k_output_usd: float
+    ingest_token: str | None
 
 
 def load_settings() -> Settings:
@@ -67,4 +68,5 @@ def load_settings() -> Settings:
         database_path=os.environ.get("TRUSTGATE_DB", "trustgate.db"),
         price_per_1k_input_usd=_env_float("TRUSTGATE_PRICE_IN", 0.0),
         price_per_1k_output_usd=_env_float("TRUSTGATE_PRICE_OUT", 0.0),
+        ingest_token=_env_optional("TRUSTGATE_INGEST_TOKEN"),
     )

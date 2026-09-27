@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import sys
 from collections.abc import Sequence
 from datetime import datetime, timezone
@@ -19,6 +20,17 @@ from app.schemas import CheckerResult, RunRecord, Verdict, VerdictRecord
 # trustgate/backend`, so it lands on this same path.
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
 
+# Both segments land in a filename. A run_id of `../../etc/cron.d/x` would otherwise write
+# outside runs_dir entirely, so every segment is matched against this before it is joined.
+# Applied to the CLI path and the HTTP ingest path alike -- one guard, every caller.
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _safe_segment(value: str) -> str:
+    if not _SAFE_SEGMENT.match(value):
+        raise ValueError(f"unsafe run record filename segment: {value!r}")
+    return value
+
 
 def write_run_records(
     results: Sequence[CheckerResult],
@@ -30,8 +42,9 @@ def write_run_records(
     written_at = datetime.now(timezone.utc).isoformat()
     paths = []
     for result in results:
+        name = f"{_safe_segment(run_id)}_{_safe_segment(result.checker)}.json"
         record = RunRecord(run_id=run_id, pr=pr, written_at=written_at, result=result)
-        path = runs_dir / f"{run_id}_{result.checker}.json"
+        path = runs_dir / name
         path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
         paths.append(path)
     return paths
