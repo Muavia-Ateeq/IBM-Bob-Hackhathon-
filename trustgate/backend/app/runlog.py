@@ -12,7 +12,12 @@ from pydantic import ValidationError
 from app.adjudicator import adjudicate
 from app.schemas import CheckerResult, RunRecord, Verdict, VerdictRecord
 
-DEFAULT_RUNS_DIR = Path("runs")
+# Anchored to this file, not the working directory. `Path("runs")` resolved against the CWD,
+# which made the records invisible to anything started from a different directory than the
+# one that wrote them -- the served app and the integration check then read two different
+# folders and could never agree. CI passes `--runs-dir runs` explicitly after `cd
+# trustgate/backend`, so it lands on this same path.
+DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
 
 
 def write_run_records(
