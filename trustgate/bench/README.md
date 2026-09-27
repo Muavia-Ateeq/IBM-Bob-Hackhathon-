@@ -9,22 +9,53 @@ python bench/run_benchmark.py --only issue-09-weak-hash
 `cases.json` is validated by Pydantic at load, so a typo in the ground truth
 fails loudly rather than becoming a measurement.
 
+## The roster is not written here
+
+The runner's checker list is **derived**, not hand-copied:
+
+```python
+from app.main import CHECKER_MODULES
+CHECKERS = tuple(module.__name__.rsplit(".", 1)[-1] for module in CHECKER_MODULES)
+```
+
+It used to carry its own tuple. A checker added to `app.main.CHECKER_MODULES`
+and forgotten in `bench/` scored zero for the whole benchmark while every
+printed number still looked like a measurement — the exact fail-open this
+project exists to not ship. `tests/test_bench_scoring.py::test_the_bench_roster_is_the_engine_roster`
+is the guard that keeps the two honest about each other. Seven checkers today:
+`secrets`, `authz`, `injection`, `prompt_injection`, `business`,
+`security_reviewer`, `spec_conformance`.
+
+**`security_reviewer` and `spec_conformance` are unmeasured.** No case in
+`cases.json` names either as `expected_checker`, so the corpus says nothing at
+all about whether they work. That is recorded in
+`test_every_bench_checker_is_in_the_corpus_ground_truth_or_is_known` rather than
+left implicit.
+
 ## Current state: INCOMPLETE, and it says so
 
-A default run today reports:
+A default run today, with no `GITLEAKS_BIN` and no provider credential, reports:
 
 ```
-secrets     SKIPPED    FileNotFoundError: [WinError 2] ... — no rate reported
-authz       SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
-injection   SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
-business    SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
+  secrets     SKIPPED    FileNotFoundError: [WinError 2] The syst — no rate reported
+  authz       SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  injection   SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  prompt_injection SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  business    SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  security_reviewer SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  spec_conformance SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
 
-OVERALL: INCOMPLETE - 4 of 4 checkers did not complete.
+OVERALL: INCOMPLETE - 7 of 7 checkers did not complete.
 ```
 
-That is the correct output, and it is what the runner produced with no
-`GITLEAKS_BIN` set. K12 (no `GROQ_API_KEY`) is open, and no number in the report
-is estimated to fill the gap.
+The reason is truncated in that column; the full string is
+`neither WATSONX_API_KEY nor GROQ_API_KEY is set`. Providers are tried in order
+— IBM watsonx.ai, then Groq — and `ProviderUnavailable` carries every failure
+reason when all of them fail. **UNVERIFIED: no IBM watsonx.ai credential has ever
+existed in this project, so the watsonx path has never made a live call.**
+
+`OVERALL: INCOMPLETE` here is the correct output, not a failure. K12 (no
+credential) is open, and no number in the report is estimated to fill the gap.
 
 **With gitleaks on the path, one checker does report.** K14 closed on
 2026-09-26 — `GITLEAKS_BIN` pointed at the checksum-verified binary produces a
@@ -36,13 +67,20 @@ GITLEAKS_BIN="$PWD/.tools/gitleaks.exe" ./.venv/Scripts/python.exe ../bench/run_
 
 ```
 issue-02-hardcoded-key        BLOCK   secrets     tp     hardcoded credential
-  secrets    MEASURED   TP 1  FP 0  FN 0  precision 1.00  recall 1.00
-OVERALL: INCOMPLETE - 3 of 4 checkers did not complete.
+  secrets     MEASURED   TP 1  FP 0  FN 0  precision 1.00  recall 1.00
+  authz       SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  injection   SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  prompt_injection SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  business    SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  security_reviewer SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+  spec_conformance SKIPPED    ProviderUnavailable: neither WATSONX_API — no rate reported
+
+OVERALL: INCOMPLETE - 6 of 7 checkers did not complete.
 ```
 
 **n=1. That is a demonstration that the harness measures, not an accuracy
-claim**, and the `INCOMPLETE` line stays because three checkers genuinely did not
-run. Do not quote a precision from a single case.
+claim** — do not quote a precision from a single case. The `INCOMPLETE` line
+stays because the six LLM checkers genuinely did not run.
 
 **The contract the runner enforces.** Three rules, all of them the same idea
 applied at three levels:
@@ -50,9 +88,9 @@ applied at three levels:
 1. A checker that did not complete OK on **every** case gets no precision and no
    recall — only the reason it failed.
 2. A case is not scored if the checkers that could have changed its score did not
-   finish. For a case with an `expected_checker`, that is *that* checker — three
-   unrelated LLM checkers being down says nothing about whether `secrets` found
-   the defect, so a correct finding is not thrown away (K22). A case that expects
+   finish. For a case with an `expected_checker`, that is *that* checker — the
+   unrelated LLM checkers being down says nothing about whether `secrets`
+   found the defect, so a correct finding is not thrown away (K22). A case that expects
    **clean** is the opposite: any checker at all could have raised the false
    positive being ruled out, so one degraded checker disqualifies it.
    Scoring "no findings" from a run where nothing finished as a false negative is
@@ -60,8 +98,8 @@ applied at three levels:
 3. The run ends `INCOMPLETE`, never `PASS`, if anything was skipped — the same
    contract `adjudicator.py` applies to a degraded run.
 
-Set `GROQ_API_KEY` and the remaining three report real figures. Until then they
-will not, by design.
+Set `WATSONX_API_KEY` or `GROQ_API_KEY` and the LLM checkers report real
+figures. Until then they will not, by design.
 
 ## How a case is run
 
@@ -77,7 +115,7 @@ The runner invents no analysis path. Per case it:
 Two details that are easy to get wrong and are load-bearing:
 
 - **`--workspace` is not optional.** `checkers/secrets.py:48` shells out to
-  `gitleaks dir … <workspace>` and ignores the diff argument entirely; the three
+  `gitleaks dir … <workspace>` and ignores the diff argument entirely; the six
   semantic checkers read the diff. Supplying only a diff scores the one
   deterministic checker at zero recall for a reason that is not its fault. This
   is the same class of bug the gate already had once, per `SYSTEM_LEDGER.md`.
@@ -85,27 +123,21 @@ Two details that are easy to get wrong and are load-bearing:
   so `backend/` has to be on `sys.path`; the workspace path is passed
   engine-relative.
 
-## `PYTHONIOENCODING` is set for the subprocess — a real engine bug
+## `PYTHONIOENCODING` is set for the subprocess
 
-The runner sets `PYTHONIOENCODING=utf-8` in the child environment because
-`app/main.py:26`'s progress logger prints `→` (U+2192). Under a pipe on Windows
-Python falls back to cp1252 and `_log` raises:
+The runner sets `PYTHONIOENCODING=utf-8` in the child environment as
+belt-and-braces.
 
-```
-UnicodeEncodeError: 'charmap' codec can't encode character '→' at position 11
-  File "engine\app\main.py", line 26, in _log
-```
+This used to be load-bearing. The engine's progress logger prints `→`
+(U+2192), and under a pipe on Windows Python falls back to cp1252, so
+`python app/main.py … | tee` and any CI step capturing output died with
+`UnicodeEncodeError` before a single run record was written. `SYSTEM_LEDGER.md`
+K24 records the fix, landed 2026-09-26: `app/main.py` now reconfigures both of
+its streams to utf-8 at import, so the engine is unpipeable no longer.
 
-`SYSTEM_LEDGER.md` records "Emoji survive stdout on this platform — checked, not
-assumed". That check was real but narrower than it reads: it holds for an
-interactive terminal, where stdout is utf-8, and **not** for a pipe. So
-`python app/main.py … | tee` and any CI step capturing output dies on Windows.
-
-**The one-line fix belongs in the engine, not here** — `sys.stdout.reconfigure(
-encoding="utf-8")` at the top of `main()`, or an `errors="replace"` on the
-logger. It has not been applied: it is outside the scope this runner was built
-under. Until it is, the workaround lives in the harness and the engine remains
-unpipeable on Windows.
+The variable stays set because the engine's fix is a runtime behaviour and a
+harness that leaned on it without setting it would be one refactor away from
+silently losing a run's output.
 
 The runner also scans the child's stderr for `Traceback` before trusting its
 exit code. The engine exits 1 on `BLOCK`, and an unhandled crash also exits 1 —

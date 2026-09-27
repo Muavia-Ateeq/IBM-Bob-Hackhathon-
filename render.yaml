@@ -13,5 +13,17 @@ services:
     envVars:
       - key: PYTHONPATH
         value: backend
+      # Primary provider first, Groq second. Both keys are `sync: false` — you paste the value
+      # into the Render dashboard by hand. Nothing secret is ever written to this file.
+      - key: WATSONX_API_KEY
+        sync: false
       - key: GROQ_API_KEY
+        sync: false
+      - key: WATSONX_URL
+        value: https://us-south.ml.cloud.ibm.com
+      - key: WATSONX_MODEL
+        value: ibm/granite-4-h-small
+      # watsonx.ai scopes a request to a project or a space. Set one of these to a non-secret
+      # ID from your watsonx.ai account; without one the engine drops IBM and logs why.
+      - key: WATSONX_PROJECT_ID
         sync: false

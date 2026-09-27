@@ -110,10 +110,11 @@ Deliverable: the wedge statement, agreed by all 6. Everything in Phase 3 must tr
 
 ### Phase 2 — Stack Lock & Scaffold (T+3h → T+5h)
 
-- Confirm exact model IDs against live Groq docs — **including the strict-mode supported list**
+- Confirm exact model IDs against live IBM watsonx.ai and Groq docs — **including Groq's
+  strict-mode supported list** (watsonx `.chat()` is unconfirmed for strict-mode support)
 - Scaffold `backend/`, `dashboard/`, `.github/workflows/`
 - Pin dependency versions into lockfiles
-- Confirm a Groq API key is present in the environment
+- Confirm an IBM watsonx.ai key (with project ID) is present, and a Groq key as fallback
 - Green test: the engine boots, the dashboard renders, `/health` returns 200
 
 ### Phase 3 — Core Build (T+5h → T+30h)
@@ -122,8 +123,8 @@ The long phase. Suggested split across 6 people, adjusted as the team sees fit:
 
 | Owner | Workstream |
 |-------|-----------|
-| A | `backend/app/llm/` — Groq client, strict schema enforcement, retry, cache-by-input-hash |
-| B | `backend/app/checkers/` — the 5 checkers + `base.py` protocol |
+| A | `backend/app/llm/` — watsonx.ai primary + Groq fallback client, strict schema enforcement, retry, cache-by-input-hash |
+| B | `backend/app/checkers/` — the 7 checkers + `base.py` protocol |
 | C | `backend/app/adjudicator.py` + `schemas.py` + `store.py` + `tests/` |
 | D | `.github/workflows/trustgate.yml` + `sarif.py` + secrets/permissions plumbing |
 | E | `dashboard/` — API client, components, verdict rendering |
@@ -161,10 +162,29 @@ optional is strictly better than submitting at T+48h and having a broken build.*
 | M2 | Wedge agreed | T+3h | One sentence, signed off by all 6 |
 | M3 | Stack locked | T+5h | Scaffold boots; model IDs verified against live docs |
 | M4 | First real verdict | T+14h | One PR, end to end, verdict rendered |
-| M5 | All 5 checkers live | T+24h | Every checker produces findings on the corpus |
+| M5 | All 7 checkers live | T+24h | Every checker produces findings on the corpus |
 | M6 | Gate installed | T+30h | Workflow runs on a real PR; SARIF visible in the Security tab |
 | M7 | Numbers measured | T+38h | Every README number traces to a recorded run |
 | M8 | Submitted | T+45h | lablab submission live, 3h buffer intact |
+
+> **M5 is not met.** 5 of the 7 checkers produce findings on the corpus; `security_reviewer`
+> and `spec_conformance` are named by no case in `bench/cases.json` and are therefore
+> unmeasured. The roster is 7 — one deterministic (`secrets`), six semantic.
+>
+> **M6 is now met, in two halves.** The workflow runs on a real pull request and is green:
+> runs `36317034453` (PR #6) and `36311839360` (PR #5) both completed `success` on
+> 2026-09-27, and the SARIF upload step succeeded inside `36317931615`. **The second half is
+> not verified** — "SARIF visible in the Security tab" means Code Scanning *accepted* the
+> report and rendered alerts, which is a different claim from the upload step succeeding.
+> `UNVERIFIED — open the Code Scanning tab on the default branch and confirm alerts render`
+>
+> **M4 is not met.** The gate runs and renders a verdict, but no run has yet reached a live
+> provider: the six semantic checkers degrade to `REVIEW` because no `WATSONX_API_KEY` and
+> no `GROQ_API_KEY` have been observed in the Actions environment. A verdict has been
+> rendered end to end; a *real* one has not. `UNVERIFIED — read a `tests`/gate job summary for
+> an `authz ok` line rather than `DEGRADED … ProviderUnavailable``
+>
+> **M7 is not met** and no number is published that is not traced to a recorded run.
 
 ---
 
@@ -175,7 +195,7 @@ Every metric below states its **measurement method**. A metric without a method 
 | Metric | Target | How it is measured |
 |--------|--------|-------------------|
 | Gate wall-clock latency | p95 < 60s end to end | Timed over ≥30 corpus runs; p95 from recorded durations |
-| Cost per PR verdict | < $0.50 | Sum of Groq token usage from API responses ÷ runs. Not estimated |
+| Cost per PR verdict | < $0.50 | Sum of token usage from API responses ÷ runs — **Groq-served runs only.** watsonx `.chat()` returns no token usage, so cost is not measurable on watsonx-served runs. Not estimated |
 | False-positive rate | < 15% on the corpus | Findings labelled false by 2 reviewers ÷ total findings, disagreements resolved by a 3rd |
 | Recall on known-vuln samples | > 80% | Corpus samples with a known planted flaw that produced a finding ÷ total samples |
 | Verdict correctness | 100% on error injection | Every fault-injection case (timeout, malformed JSON, HTTP 500, empty diff) yields `REVIEW` or `UNKNOWN`. **Never `PASS`** |

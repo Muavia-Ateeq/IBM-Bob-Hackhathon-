@@ -3,6 +3,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+__version__ = "0.1.0"
+
+
+def _env_optional(name: str) -> str | None:
+    raw = os.environ.get(name)
+    return raw if raw and raw.strip() else None
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -31,6 +38,8 @@ class Settings:
     watsonx_api_key: str | None
     watsonx_url: str
     watsonx_model_id: str
+    watsonx_project_id: str | None
+    watsonx_space_id: str | None
     checker_timeout_s: int
     run_budget_s: int
     max_diff_bytes: int
@@ -42,14 +51,14 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    key = os.environ.get("GROQ_API_KEY")
-    wx = os.environ.get("WATSONX_API_KEY")
     return Settings(
-        groq_api_key=key if key and key.strip() else None,
+        groq_api_key=_env_optional("GROQ_API_KEY"),
         model_id=os.environ.get("TRUSTGATE_MODEL", "openai/gpt-oss-120b"),
-        watsonx_api_key=wx if wx and wx.strip() else None,
+        watsonx_api_key=_env_optional("WATSONX_API_KEY"),
         watsonx_url=os.environ.get("WATSONX_URL", "https://us-south.ml.cloud.ibm.com"),
         watsonx_model_id=os.environ.get("WATSONX_MODEL", "ibm/granite-4-h-small"),
+        watsonx_project_id=_env_optional("WATSONX_PROJECT_ID"),
+        watsonx_space_id=_env_optional("WATSONX_SPACE_ID"),
         checker_timeout_s=_env_int("TRUSTGATE_CHECKER_TIMEOUT_S", 30),
         run_budget_s=_env_int("TRUSTGATE_RUN_BUDGET_S", 90),
         max_diff_bytes=_env_int("TRUSTGATE_MAX_DIFF_BYTES", 120_000),

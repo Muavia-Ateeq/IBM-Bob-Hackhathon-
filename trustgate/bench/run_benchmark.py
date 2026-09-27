@@ -40,10 +40,14 @@ BENCH_DIR = REPO_ROOT / "bench"
 if str(ENGINE_DIR) not in sys.path:
     sys.path.insert(0, str(ENGINE_DIR))
 
+from app.main import CHECKER_MODULES  # noqa: E402
 from app.runlog import compute_verdict  # noqa: E402
 from app.schemas import CheckerStatus, VerdictRecord  # noqa: E402
 
-CHECKERS = ("secrets", "authz", "injection", "business")
+# The roster, read from the engine rather than copied here. This used to be a hand-maintained
+# tuple that silently fell behind `app.main.CHECKER_MODULES` — a checker added to one and
+# forgotten in the other scores zero without ever saying so.
+CHECKERS = tuple(module.__name__.rsplit(".", 1)[-1] for module in CHECKER_MODULES)
 
 
 # --------------------------------------------------------------------------
@@ -203,11 +207,11 @@ def run_case(corpus: Corpus, case: Case, workdir: Path) -> CaseResult:
     # backend/ must be the cwd: app/main.py imports `from app.checkers import ...`,
     # so backend/ has to be on sys.path. The workspace is therefore backend-relative.
     #
-    # PYTHONIOENCODING is set because main.py's progress logger prints U+2192.
-    # Under a pipe on Windows Python falls back to cp1252 and _log raises
-    # UnicodeEncodeError, killing the run before any record is written. In an
-    # interactive terminal stdout is utf-8 and this never fires, which is why it
-    # survived being tested by hand. See the note in bench/README.md.
+    # PYTHONIOENCODING is belt-and-braces. main.py already reconfigures both of
+    # its streams to utf-8 at import (K24), so the child is unpipeable no
+    # longer; this stays because the engine's fix is a runtime behaviour and a
+    # harness that depends on it without setting it is one refactor away from
+    # silently losing a run's output.
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     completed = subprocess.run(
         [

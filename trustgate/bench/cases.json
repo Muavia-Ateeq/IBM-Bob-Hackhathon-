@@ -5,7 +5,7 @@
   "line_tolerance": 5,
   "notes": [
     "Every case is demo_target/base with exactly ONE planted defect, so the generated diff is minimal and any finding outside the expectation below is a false positive by construction.",
-    "expected_checker is the checker whose FOCUS string the defect was assigned against by reading backend/app/checkers/*.py -- not by the case name. Where null, the ground truth is ZERO findings and any finding is a false positive.",
+    "expected_checker is the checker whose FOCUS string the defect was assigned against by reading trustgate/backend/app/checkers/*.py -- not by the case name. Where null, the ground truth is ZERO findings and any finding is a false positive.",
     "disputed: true means the assignment is genuinely arguable between two checkers or between a checker and none. A miss on a disputed case is reported separately rather than counted as a plain false negative, because the corpus does not get to define correctness by its own preference.",
     "line_tolerance: a model that points at a neighbouring line of the same statement is not a miss. Beyond the window it is.",
     "This corpus cannot yet produce a precision or recall figure. Three of the four checkers need GROQ_API_KEY (K12) and the fourth needs the gitleaks binary (K14). bench/run_benchmark.py refuses to print a rate for any checker that did not run."
@@ -19,7 +19,7 @@
       "expected_line": 3,
       "expected_severity": null,
       "disputed": false,
-      "no_checker_reason": "Dependency verification is backend/app/checkers/deps.py, which is NOT BUILT and is blocked on K13 -- the OSV-Scanner JSON carries no line number. No checker in the roster owns a typosquatted package name."
+      "no_checker_reason": "Dependency verification is trustgate/backend/app/checkers/deps.py, which is NOT BUILT and is blocked on K13 -- the OSV-Scanner JSON carries no line number. No checker in the roster owns a typosquatted package name."
     },
     {
       "id": "issue-02-hardcoded-key",
@@ -66,12 +66,12 @@
     {
       "id": "issue-06-prompt-injection",
       "title": "Untrusted profile notes concatenated into a model instruction",
-      "expected_checker": "injection",
+      "expected_checker": "prompt_injection",
       "expected_file": "app.py",
       "expected_line": 103,
       "expected_severity": "medium",
-      "disputed": true,
-      "rationale": "Arguable. injection FOCUS says 'template injection' and a string-built prompt is a template, so injection can fairly claim it. No FOCUS string mentions prompt injection or instruction hierarchy at all, so 'no checker owns this' is an equally defensible reading. Recorded as disputed rather than silently resolved in either direction."
+      "disputed": false,
+      "rationale": "prompt_injection FOCUS (checkers/prompt_injection.py:7) names 'user-controlled or externally-sourced text ... being concatenated or interpolated directly into a string that is then sent to an LLM as an instruction, with no delimiter, no escaping', which is the fixture exactly. This case was disputed against injection when no FOCUS in the roster mentioned prompt injection, and injection could fairly claim it under 'template injection'. Adding the checker resolved the dispute on the evidence rather than by preference, so disputed is now false. injection remains free to fire on this diff too, and would be charged a false positive here — which is the corpus working, not a second owner."
     },
     {
       "id": "issue-07-license-violation",

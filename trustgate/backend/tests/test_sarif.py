@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.config import __version__
 from app.sarif import SARIF_SCHEMA, to_sarif, write_sarif
 from app.schemas import Finding, Severity, Verdict, VerdictRecord
 
@@ -67,7 +68,10 @@ def test_every_field_github_marks_required_is_present_and_non_empty() -> None:
 def test_a_clean_run_still_carries_a_populated_rule_catalogue() -> None:
     rules = to_sarif(_record(), "42")["runs"][0]["tool"]["driver"]["rules"]
     assert rules, "GitHub marks rules[] required on the driver; a clean run must not empty it"
-    assert {rule["id"] for rule in rules} == {f"trustgate/{name}" for name in ("authz", "business", "injection", "secrets")}
+    assert {rule["id"] for rule in rules} == {
+        f"trustgate/{name}"
+        for name in ("authz", "business", "injection", "prompt_injection", "secrets")
+    }
 
 
 def test_results_carry_the_fields_github_marks_required() -> None:
@@ -150,3 +154,22 @@ def test_the_document_is_json_serialisable_and_written_to_disk(tmp_path) -> None
     reloaded = json.loads(path.read_text(encoding="utf-8"))
     assert reloaded["version"] == "2.1.0"
     assert len(reloaded["runs"][0]["results"]) == 1
+
+
+def test_the_driver_reports_the_real_version_not_a_placeholder() -> None:
+    """Every SARIF the gate uploaded before this said "0.0.0": `to_sarif` defaulted the
+    tool version to a literal and the only caller never passed one, so GitHub showed an
+    unversioned tool. The default is now the single source of truth."""
+    assert to_sarif(_record(_finding()), "42")["runs"][0]["tool"]["driver"]["version"] == __version__
+    assert __version__ != "0.0.0"
+
+
+def test_write_sarif_carries_the_same_version(tmp_path) -> None:
+    path = write_sarif(_record(_finding()), "42", tmp_path / "out.sarif")
+    reloaded = json.loads(path.read_text(encoding="utf-8"))
+    assert reloaded["runs"][0]["tool"]["driver"]["version"] == __version__
+
+
+def test_an_explicit_tool_version_still_overrides() -> None:
+    doc = to_sarif(_record(_finding()), "42", tool_version="9.9.9")
+    assert doc["runs"][0]["tool"]["driver"]["version"] == "9.9.9"

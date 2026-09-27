@@ -12,11 +12,12 @@
 | **Name** | TrustGate |
 | **Event** | IBM Bob 2.0 Hackathon — lablab.ai, online, Sept 25–27 2026 |
 | **Deadline** | Submissions close **Sun Sep 27 2026, 15:00 UTC** |
-| **Type** | Intended three-service monorepo: Python/FastAPI verdict engine + React/Vite dashboard + GitHub Actions gate. The engine and the gate exist; `dashboard/` does not. |
+| **Type** | Intended three-service monorepo: Python/FastAPI verdict engine + React/Vite dashboard + GitHub Actions gate. All three exist. |
 | **Team** | 6 |
 | **Domain** | Application security — pre-merge pull request risk gating |
 | **Core Purpose** | Run security checkers in parallel against a pull request diff, merge their findings through a deterministic adjudicator, and emit one verdict — `PASS`, `REVIEW`, or `BLOCK` — with cited evidence |
-| **Status** | Engine core built and tested, runnable from the CLI. Four of five checkers exist; none has produced a real finding yet. The SARIF converter, the GitHub gate, the PR-comment formatter, and a four-check smoke test are built but **have never run live** — no workflow execution, no accepted upload, no comment posted. The dashboard is **not built**. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
+| **Version** | `__version__ = "0.1.0"` in `backend/app/config.py`, single source of truth. It is what the FastAPI app title reports *and* what `sarif.py` writes to `tool.driver.version`. Previously SARIF emitted a hardcoded `"0.0.0"` on every upload ever made — that is fixed, and a second hardcoded version string is a defect |
+| **Status** | Engine core built and tested, runnable from the CLI. All seven checkers exist; `secrets` has produced a real `BLOCK` against the planted `issue-02-hardcoded-key` fixture (n=1). The six semantic checkers have never run against a live model. The GitHub gate **is green** — runs `36317034453` (PR #6) and `36311839360` both completed `success` on 2026-09-27, SARIF upload included (ledger K20, K27). No PR comment has been posted. The dashboard is built but not deployed. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
 
 ### Naming constraints (verified, not hypothetical)
 
@@ -47,11 +48,12 @@ Consequences, binding on this project:
 
 | Technology | Rationale |
 |------------|-----------|
-| Python 3.11+ | Team fluency; native async for 5-way parallel fan-out |
+| Python 3.11+ | Team fluency; native async for 7-way parallel fan-out |
 | FastAPI | Async-native HTTP layer; the Actions gate and the dashboard are both HTTP clients |
 | Pydantic v2 | Enforces the checker output schema **at the boundary** — an LLM that returns malformed JSON is rejected before it reaches the adjudicator |
-| httpx | Async HTTP client for Groq; connection pooling matters at 5 concurrent calls |
-| Groq SDK (`groq`) | Primary LLM inference. OpenAI-compatible surface, low latency — the property that makes 5 parallel checkers feel instant |
+| httpx | Async HTTP client used underneath the Groq SDK; connection pooling matters at 7 concurrent calls. TrustGate does not construct an `AsyncClient` itself |
+| IBM watsonx.ai SDK (`ibm-watsonx-ai` 1.7.2) | **Primary LLM inference.** On-theme for an IBM event, and its models carry IBM's indemnification, which third-party models do not |
+| Groq SDK (`groq`) | **Fallback inference.** OpenAI-compatible surface, low latency; it is second in the chain, not the default |
 | SQLite (stdlib `sqlite3`) | Intended for the verdict log. A single file is swappable for Postgres later; do not add a DB server during a 48h build. **Not built** — `runlog.py` JSON records are what exists. |
 
 ### Dashboard — `dashboard/`
@@ -70,12 +72,13 @@ Consequences, binding on this project:
 | SARIF 2.1.0 | Native GitHub Code Scanning format. Findings render inline on the diff |
 | `github/codeql-action/upload-sarif` | Uploads findings. Requires `security-events: write` permission |
 
-**State: written and unit-tested, never executed on GitHub.** `tests/test_gate.py` pins the
+**State: built, unit-tested, and executed on GitHub — green.** Runs `36317034453` (PR #6) and
+`36311839360` (PR #5) both completed `success` on 2026-09-27, SARIF upload step included.
+`tests/test_gate.py` pins the
 BLOCK-grep pattern against the CLI's own output so a format change cannot silently disable
 blocking, and `tests/test_sarif.py` validates the report against both the OASIS schema and
-GitHub's stricter required table. What is *not* verified: that the workflow runs at all, and
-that Code Scanning accepts the upload. UNVERIFIED — pushing any branch and reading the Actions
-tab is what verifies it.
+GitHub's stricter required table. What is *not* verified: that Code Scanning *accepted* the
+upload and rendered the alerts — the upload step succeeded, which is a different claim.
 
 ### Deterministic scanners (checker tier 1)
 
@@ -95,13 +98,12 @@ tab is what verifies it.
 ```
 /                                    # REPO ROOT — read by path from here, so it cannot move:
 ├── AGENTS.md                  #   pointer to trustgate/docs/AGENTS.md, for root-loading tools
-├── .github/workflows/trustgate.yml  # the gate — written, NEVER RUN (ledger K20)
+├── .github/workflows/trustgate.yml  # the gate — HAS RUN, twice, both failure (ledger K20)
 ├── .github/gitleaks.toml      #   gate-only allowlist; outside the scan target on purpose (3a)
-├── render.yaml                 # Render blueprint — LIVE at trustgate-api-ehib.onrender.com
+├── render.yaml                 # Render blueprint — the API is live at https://trustgate-api-ehib.onrender.com; VERIFIED 2026-09-27, /api/health returned {"ok":true}
 ├── Procfile                    #   same start command, for any Procfile host
-├── vercel.json                 # Vercel SPA config — inert, no frontend
+├── vercel.json                 # Vercel SPA config for dashboard/ — never deployed
 └── trustgate/                  #   everything else lives here
-    ├── AGENTS.md              # Pointer to docs/AGENTS.md, so root-loading tools find the rules
     ├── docs/                     # Governance — all of it, one directory
     │   ├── AI_CONTEXT.md           # This file — constitution
     │   ├── PROJECT_ROADMAP.md      # Phases, one ACTIVE at a time
@@ -114,86 +116,109 @@ tab is what verifies it.
     │   ├── 01-planning-governance.md
     │   ├── 02-session-continuity.md
     │   └── 03-scope-control.md
-    ├── screenshots/           # Demo images — empty
+    ├── screenshots/           # Demo images — 10 files
+    ├── runs/                      # Run records — gitignored; see the runlog note below
     ├── backend/                    # Python/FastAPI verdict engine — BUILT
     │   ├── app/
-    │   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
+    │   │   ├── main.py            # CLI entry point; CHECKER_MODULES, build_app()
     │   │   ├── checkers/          # One module per checker. See roster below.
     │   │   │   ├── base.py        # Checker protocol, timeout, asyncio.gather fan-out
     │   │   │   ├── semantic.py    # The shared Tier 2 LLM checker
-    │   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT, never run
+    │   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT AND RUN; produces a real BLOCK (K14)
     │   │   │   ├── authz.py       # Tier 2 — LLM
     │   │   │   ├── injection.py   # Tier 2 — LLM
+    │   │   │   ├── prompt_injection.py # Tier 2 — LLM
     │   │   │   ├── business.py    # Tier 2 — LLM
-    │   │   │   ├── deps.py        # Tier 1 — OSV-Scanner — NOT BUILT (blocked, ledger K13)
+    │   │   │   ├── security_reviewer.py # Tier 2 — LLM
+    │   │   │   ├── spec_conformance.py  # Tier 2 — LLM
     │   │   │   └── CONTRIBUTING.md # The contract every checker author implements
     │   │   ├── adjudicator.py     # Deterministic verdict. No LLM in this path.
-    │   │   ├── llm/               # Groq client (strict mode), FINDING_SCHEMA
+    │   │   ├── llm/               # client.py (Groq, FallbackProvider, build_provider),
+    │   │   │                      # watsonx_client.py (WatsonxProvider), schemas.py
     │   │   ├── runlog.py          # runs/*.json — write records, recompute a verdict from disk
     │   │   ├── comment.py         # VerdictRecord → PR comment. Local, NOT wired into the gate
-    │   │   ├── config.py          # Settings, env-overridable
+    │   │   ├── config.py          # Settings, env-overridable, and `__version__`
     │   │   ├── sarif.py           # Finding → SARIF 2.1.0 — BUILT, never uploaded
-    │   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
     │   │   └── schemas.py         # Pydantic request/response contracts
     │   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
-    │   ├── tests/                 # 81 passing across 8 files
+    │   ├── tests/                 # 110 passing across 11 files
     │   ├── requirements.txt       # Pinned installed set
     │   └── pyproject.toml         — NOT BUILT
-    ├── demo_target/           # Labelled corpus — BUILT, never run against a live checker
+    ├── demo_target/           # Labelled corpus — BUILT; secrets checker measured against it (n=1)
     │   ├── base/                  # The clean app every fixture is a one-defect copy of
-    │   └── issue-NN-*/            # One planted defect each; 3 have no checker, 2 are disputed
+    │   └── issue-NN-*/            # 9 planted defects (issue-05 unplanted); 2 have no owning checker, 2 are disputed
     ├── bench/                 # Ground truth + the measurement runner
     │   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
-    │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
-    ├── dashboard/             # React/Vite — NOT BUILT
-    │   └── src/
-    │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
-    │       ├── lib/               # API client, verdict token mapping
-    │       └── types.ts           # Mirrors backend/app/schemas.py
-    └── README.md
+    │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 closes (K14 is closed)
 ```
+
+`dashboard/` sits at the **repo root**, not under `trustgate/`: React/Vite/TypeScript, integrated
+from PR #2. It is the one screen plus an approval-override component; `npm ci` reports 0
+vulnerabilities and `npm run build` succeeds. UNVERIFIED — it has never been deployed; the
+`vercel.json` at the root is a config file, not a deployment.
+
+The root `README.md` is the only README in the repo. There is no `trustgate/AGENTS.md` — the root
+`AGENTS.md` is the pointer file and the rules live at `trustgate/docs/AGENTS.md`.
 
 `routes/` was planned and never built as a package. `build_app()` in `main.py` carries the three
 routes it needs — `/api/health`, `/api/pr/{pr}/verdict`, and `/api/runs` — declared inline,
 because a package for three handlers is a directory with no reason to exist yet. There is no
-`POST /analyze` and no HTTP analysis entry point, so `schemas.AnalyzeRequest` is still
-referenced by nothing. The verdict and runs routes are `def`, not `async def`, so the run-log
-glob runs in Starlette's threadpool rather than blocking the event loop.
+`POST /analyze` and no HTTP analysis entry point, so `schemas.AnalyzeRequest` — which used to
+describe that missing route — has been deleted rather than left as a contract nothing fulfils.
+The verdict and runs routes are `def`, not `async def`, so the run-log glob runs in Starlette's
+threadpool rather than blocking the event loop.
 
 `/api/runs` lists every run record on disk. It is unauthenticated and the app allows every
 origin, and a run record carries `Finding.evidence` verbatim — for the secrets checker, a
 fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.md`.
 
-### The checker roster — five, deliberately heterogeneous
+### The checker roster — seven, deliberately heterogeneous
 
 | # | Checker | Tier | Detects | Method |
 |---|---------|------|---------|--------|
 | 1 | `secrets` | 1 | Hardcoded credentials, API keys, private keys | Gitleaks |
-| 2 | `deps` | 1 | Known CVEs in Python + npm dependencies | OSV-Scanner |
-| 3 | `authz` | 2 | Missing authorization, IDOR, privilege escalation, broken access control | LLM |
-| 4 | `injection` | 2 | SQL/command injection, XSS, SSRF, unsafe deserialization | LLM |
+| 2 | `authz` | 2 | Missing authorization, IDOR, privilege escalation, broken access control | LLM |
+| 3 | `injection` | 2 | SQL/command injection, XSS, SSRF, unsafe deserialization | LLM |
+| 4 | `prompt_injection` | 2 | Untrusted text concatenated into a model instruction; agent-directed repo content | LLM |
 | 5 | `business` | 2 | Business-logic flaws, race conditions, crypto misuse, validation gaps | LLM |
+| 6 | `security_reviewer` | 2 | Debug/verbose mode left enabled in production config. Narrow by design — explicitly **excludes** secrets, injection, authz, deserialization and crypto, which other checkers own | LLM |
+| 7 | `spec_conformance` | 2 | Code measured against the product requirements themselves (password hashing, rate limiting, no hardcoded keys, no debug mode) | LLM |
+
+`security_reviewer` and `spec_conformance` were implemented by M. Muavia from his IBM Bob
+subagent prompts in `trustgate/docs/muavia_prompts/`. `security_reviewer` is wired to the shared
+`SemanticChecker`. `spec_conformance` is **not** — it is a two-step checker (Step A extracts
+quotable requirements from its inline `PRD_TEXT`, Step B checks the diff against them) with its
+own `REQUIREMENTS_SCHEMA` and its own two provider calls, because a checker that invents its own
+requirements is a checker that invents its own findings. `app.main.CHECKER_MODULES`
+is the single roster tuple; `trustgate/bench/run_benchmark.py` derives its checker list from it
+and a parity test in `tests/test_bench_scoring.py` fails if the two ever diverge.
 
 Tiers 1 and 2 fail in different ways, and that is the point. Tier 1 is **precise and dumb** — it cannot reason about intent, so it does not try. Tier 2 is **reasoning and imprecise** — it understands that "this handler reads `user_id` from the query string and never checks ownership" is a vulnerability, but it will sometimes be wrong. The adjudicator must be built for that asymmetry.
+
+**Not in the roster: `deps`.** OSV-Scanner is a planned Tier 1 checker for known CVEs and
+`Settings.osv_scanner_bin` names its binary, but no checker module wraps it — it is blocked
+because the OSV-Scanner JSON carries no line number, and a finding without one cannot cite
+evidence (ledger K13). `bench/cases.json` records the resulting holes as `no_checker_reason`
+rather than leaving them unexplained.
 
 ### Design patterns
 
 | Pattern | Where | Description |
 |---------|-------|-------------|
-| Protocol-based checker | `backend/app/checkers/base.py` | Every checker exposes the same async interface. Adding a sixth checker must not touch the orchestrator. |
-| Fan-out / fan-in | `backend/app/checkers/base.py` (`run_all`) | Checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. **Four exist, not five** — `deps` is not built. |
+| Protocol-based checker | `backend/app/checkers/base.py` | Every checker exposes the same async interface. Adding a checker must not touch the orchestrator — `app/main.py` `CHECKER_MODULES` is the only list. |
+| Fan-out / fan-in | `backend/app/checkers/base.py` (`run_all`) | Checkers run concurrently via `asyncio.gather`. Wall-clock is the slowest checker, not the sum. **Seven exist.** |
 | Deterministic adjudicator | `backend/app/adjudicator.py` | Pure function, no I/O, no LLM. Given the same findings it always returns the same verdict. Testable without network. |
 | Schema-at-the-boundary | `backend/app/llm/` + `checkers/semantic.py` | Pydantic validates every LLM response, and a finding whose evidence is not a verbatim quote from the diff is rejected outright. A malformed response becomes a checker *error*, never a silent finding. |
-| Run log | `backend/app/runlog.py` | One JSON record per checker per run under `runs/`, re-readable into a verdict. `input_hash` is a SHA-256 over the **run records**, not over verdict inputs. Append-only SQLite (`store.py`) is **NOT BUILT**, so there is no tamper-evidence. |
+| Run log | `backend/app/runlog.py` | One JSON record per checker per run under `runs/`, re-readable into a verdict. `input_hash` is a SHA-256 over the **run records**, not over verdict inputs. A record that fails to parse has no readable `pr`, so it cannot be attributed to any PR: `load_results` returns a plain count of unreadable files, never their names, and the verdict reason says `"; N unattributable unreadable run file(s)"`. Naming them would leak another PR's run filename — which embeds its run_id and checker name — into this PR's job summary. Append-only SQLite is **NOT BUILT**, so there is no tamper-evidence. `/trustgate/runs/` is gitignored; run records carry verbatim evidence, and for the secrets checker that is a fragment of a real credential. |
 
 ### File boundaries — hard rules
 
-- `routes/` **never** imports from `checkers/` internals. It calls the orchestrator. The two
-  routes currently live inline in `main.build_app()`; that is where they move if a third
-  arrives, not into a package that exists to hold two handlers.
+- `routes/` **never** imports from `checkers/` internals. It calls the orchestrator. The three
+  routes currently live inline in `main.build_app()`; that is where a fourth goes, not into a
+  package that exists to hold three handlers.
 - `adjudicator.py` **never** imports `llm/`. This is what makes it deterministic. If you need a model in the verdict path, the verdict is no longer reproducible — stop and reconsider the design.
 - `checkers/` modules **never** import each other. Checkers are independent experts; a checker that trusts another checker's opinion is no longer an independent signal.
-- `dashboard/` **never** calls a Groq key. All inference lives server-side in `backend/`.
+- `dashboard/` **never** holds an LLM key of any kind — no `GROQ_API_KEY`, no `WATSONX_API_KEY`. All inference lives server-side in `backend/`.
 
 ---
 
@@ -266,7 +291,7 @@ gates the merge. `UNKNOWN` is what the operator sees. **Do not add `UNKNOWN` to 
 - **NEVER** auto-merge a pull request. TrustGate renders a verdict; a human decides. This is a product constraint, not a missing feature.
 - **NEVER** invent a metric. No fabricated latency, FP rate, benchmark, user count, or test count in the README, the UI, or the submission. If a number was not measured, it does not appear.
 - **NEVER** pin a GitHub Action to `Node 20`. GitHub removed Node 20 from hosted runners entirely on **Sep 16 2026**. Such actions now fail.
-- **NEVER** commit a `GROQ_API_KEY`, a GitHub token, or any `.env` file.
+- **NEVER** commit a `GROQ_API_KEY`, a `WATSONX_API_KEY`, a GitHub token, or any `.env` file.
 - **NEVER** add a dependency without approval. Tier 2. See governance below.
 - **NEVER** reference an API, function, or CLI flag you have not verified against current docs in this session.
 - **NEVER** restructure a directory that already exists in the ledger without Tier 3 approval.
@@ -292,20 +317,57 @@ gates the merge. `UNKNOWN` is what the operator sees. **Do not add `UNKNOWN` to 
 
 ## Model & Tool Strategy
 
-### Primary provider: Groq
+### Provider order: IBM watsonx.ai PRIMARY, Groq FALLBACK
 
-Endpoint: `POST https://api.groq.com/openai/v1/chat/completions` — OpenAI-compatible.
-Python SDK: `pip install groq` → `from groq import Groq` → `client.chat.completions.create(...)`.
+**This supersedes the earlier decision that recorded Groq as the only provider.** That entry in
+`SYSTEM_LEDGER.md` is left intact as history; the chain below is what the code does.
+
+The order is a product decision, not a default: watsonx is on-theme for an IBM event and its
+models carry IBM's indemnification, which third-party models do not. Groq stays in the chain
+because it was the original provider and remains the fallback. UNVERIFIED — no live inference
+call against either provider has been made and recorded in this repo; `tests/test_providers.py`
+exercises both against stubs.
+
+`build_provider` in `app/llm/client.py` assembles the chain from whichever credentials are
+present and hands it to `FallbackProvider`.
+
+| Order | Provider | Class | Config |
+|-------|----------|-------|--------|
+| 1 | IBM watsonx.ai, Granite `ibm/granite-4-h-small` | `WatsonxProvider` — `app/llm/watsonx_client.py` | `WATSONX_API_KEY`, `WATSONX_PROJECT_ID` or `WATSONX_SPACE_ID`, `WATSONX_URL`, `WATSONX_MODEL` |
+| 2 | Groq `openai/gpt-oss-120b` | `GroqProvider` — `app/llm/client.py` | `GROQ_API_KEY`, `TRUSTGATE_MODEL` |
+
+`WATSONX_PROJECT_ID` / `WATSONX_SPACE_ID` are a **new required config this project did not have
+before**: `ModelInference` is keyword-only and takes no positional arguments, and it requires
+`project_id` **or** `space_id`. A watsonx call with an API key and neither ID raises
+`ProviderUnavailable` at construction and the chain moves to Groq rather than failing the run.
+
+**UNVERIFIED — no IBM watsonx.ai credential has ever existed in this project, so the live call
+has never been made. The code is written against the introspected 1.7.2 SDK signature and
+unit-tested with stubs; a real key and project ID are required to verify it end to end.**
+
+SDK facts, verified against the installed `ibm-watsonx-ai` 1.7.2:
+
+- `from ibm_watsonx_ai.foundation_models import ModelInference` and `from ibm_watsonx_ai import Credentials`. `ModelInference` is **not** a top-level export of `ibm_watsonx_ai` — importing it from there raises `ImportError`. This bit an earlier draft of `watsonx_client.py`.
+- `.chat()` returns no token usage, so `Completion.input_tokens` / `output_tokens` stay `0` for watsonx. Cost tracking is not built either, so nothing is published from those zeros — but a watsonx-served run has no token counts to compute cost from at all.
+- `WATSONX_URL` defaults to `https://us-south.ml.cloud.ibm.com`.
+
+`FallbackProvider` prints one stderr line per failure naming the provider and the reason, and
+raises `ProviderUnavailable` carrying **all** of the reasons if every provider fails. It never
+fabricates a success.
 
 ### Routing
 
 | Purpose | Model | Why |
 |---------|-------|-----|
-| Tier 2 checkers (3 LLM checkers) | `openai/gpt-oss-120b` | **Strict** JSON-schema mode is supported by the `gpt-oss` family **and** `qwen/qwen3.8-27b` (see the supported-model list below). Strict mode guarantees a schema-valid object — it does **not** guarantee a non-empty `evidence` or `line >= 1`; those are enforced in `checkers/semantic.py`, because a checker that cannot be parsed is a checker that does not run. |
+| Tier 2 checkers (6 LLM checkers) | `ibm/granite-4-h-small` (primary) · `openai/gpt-oss-120b` (fallback) | Same schema and the same `SemanticChecker` for both — the provider swap is invisible to a checker. Strict mode guarantees a schema-valid object on the Groq side — it does **not** guarantee a non-empty `evidence` or `line >= 1`; those are enforced in `checkers/semantic.py`, because a checker that cannot be parsed is a checker that does not run. |
 | Adjudicator input shaping | same | Shares the finding schema, so one Pydantic model serves both. |
-| Fallback | `llama-3.3-70b-versatile` | Broader general capability, but **best-effort** JSON only — requires validation + retry. |
+| Groq model fallback | `llama-3.3-70b-versatile` | Broader general capability, but **best-effort** JSON only — requires validation + retry. **NOT BUILT** (the model ID appears nowhere in the codebase; `config.py` hardcodes one). |
 
 ### Structured output — the constraint that shapes the design
+
+*(This section is about the Groq provider, which is where the structured-output mode flags live.
+The watsonx provider is a different SDK surface; its behaviour is covered by the UNVERIFIED note
+above.)*
 
 Groq exposes `response_format={"type": "json_schema", "json_schema": {...}}` in two modes:
 
@@ -319,22 +381,24 @@ Hard limitations, both verified:
 - **Streaming is not supported** with Structured Outputs. All inference is non-streaming.
 - **Tool use is not supported** with Structured Outputs. Checkers are prompted, not tool-equipped.
 
-### Fallback chain — **step 1 only is implemented**
+### Within-model fallback — **step 1 only is implemented**
+
+This is a different axis from the provider chain above. The provider chain (watsonx → Groq) is
+**implemented**. The chain between *models on the same provider* is not:
 
 1. `openai/gpt-oss-120b`, strict mode — **implemented**, a single uncaught call
 2. `openai/gpt-oss-120b`, best-effort + Pydantic validation + 1 retry — **NOT BUILT**
 3. `llama-3.3-70b-versatile`, best-effort + Pydantic validation + 1 retry — **NOT BUILT** (the model ID appears nowhere in the codebase; `config.py` hardcodes one)
 4. **Checker records an error → verdict degrades to `REVIEW`.** Never `PASS`. — **implemented and tested**, but via `checkers/base.py`'s blanket exception handler and `adjudicator.py`, not via any designed recovery.
 
-So today the first hiccup on any LLM checker — a 429, a malformed body — permanently degrades that
-checker for that run. There is no retry and no recovery. The honest summary is that steps 2 and 3
-do not exist and step 4 holds for a different reason than the one intended here.
-
-Documented secondary provider, not implemented in v1: IBM watsonx / Granite (`ibm/granite-4-h-small`). Retained deliberately — it is on-theme for an IBM event and its models carry IBM's indemnification, which third-party models do not. Relevant if this ships beyond the hackathon.
+So today the first hiccup on any LLM checker that survives the provider chain — a 429, a
+malformed body — permanently degrades that checker for that run. There is no retry and no
+recovery. The honest summary is that steps 2 and 3 do not exist and step 4 holds for a different
+reason than the one intended here.
 
 ### Concurrency and cost
 
-- Checkers run via `asyncio.gather` — one `GroqProvider` instance is shared across all of them, not one per checker. **Four checkers exist, not five.** There is no `httpx.AsyncClient` in this codebase; the Groq SDK owns its own HTTP client and TrustGate neither creates nor closes it.
+- Checkers run via `asyncio.gather` — one provider instance is shared across all of them, not one per checker. **Seven checkers exist.** There is no `httpx.AsyncClient` in this codebase; each SDK owns its own HTTP client and TrustGate neither creates nor closes it.
 - **Cache by input hash.** Identical diff → identical findings. Key on SHA-256 of (repo, base SHA, head SHA, checker version). **NOT BUILT.** `VerdictRecord.input_hash` exists but hashes the run *records* after the model calls were already paid for, and nothing consults it before invoking a checker. Re-running on an unchanged PR still burns full quota.
 - Per-checker timeout: 30s — **implemented, not exercised.** `base.execute` wraps each
   checker in `asyncio.wait_for` and converts a `TimeoutError` into a `status=TIMEOUT`
@@ -344,11 +408,23 @@ Documented secondary provider, not implemented in v1: IBM watsonx / Granite (`ib
 - Whole-run budget: 90s — **NOT BUILT.** `Settings.run_budget_s` is read by nothing; `main.py` measures elapsed only to print it. A PR gate that takes longer than a coffee break gets disabled by its users.
 - **Cost tracking is NOT BUILT.** `VerdictRecord.cost_usd` has exactly one assignment, `runlog.py` → `None`. The token counts that would feed it are gathered in `llm/client.py` and discarded in `checkers/semantic.py`. No cost number may be published.
 
+### Benchmark contract
+
+`bench/run_benchmark.py` reads its roster from `app.main.CHECKER_MODULES` rather than a
+hand-copied tuple — the copy silently fell behind the engine once already, scoring a checker
+zero without saying so. A parity test in `tests/test_bench_scoring.py` fails if the two diverge.
+
+A checker that did not run gets no rate. A real run today prints
+`OVERALL: INCOMPLETE - 7 of 7 checkers did not complete` and claims no precision and no recall
+at all. That is the fail-closed contract working, not a failure to fix: a benchmark that printed
+a score with the entire roster missing would be the exact fail-open this project exists to not
+ship.
+
 ### Tool execution boundaries
 
-- The engine executes **only** the two pinned scanner binaries (Gitleaks, OSV-Scanner), via `subprocess` with an argument list — never `shell=True`.
+- The engine executes **only** the pinned Gitleaks binary, via `subprocess` with an argument list — never `shell=True`. OSV-Scanner is not executed: no checker wraps it yet (see the roster note above).
 - Scan targets are resolved from the GitHub-provided checkout path and passed as `cwd`. Scanner input is never interpolated into a command string.
-- The engine has no outbound network access other than the Groq endpoint.
+- The engine's only outbound network access is to the configured LLM provider endpoints — watsonx.ai and Groq, in that order.
 - No checker may read anything outside the checked-out PR workspace.
 
 ---
@@ -360,7 +436,7 @@ Documented secondary provider, not implemented in v1: IBM watsonx / Granite (`ib
 | Languages | `en` only for v1 |
 | Scripts | Latin |
 | Direction | **LTR** |
-| String handling | All user-facing strings in the dashboard pass through a single `strings.ts`. No inline literals in JSX. |
+| String handling | Intended: a single `strings.ts` in `dashboard/`, no inline literals in JSX. **NOT BUILT** — the file does not exist and the shipped components use inline literals. Recorded as a known gap, not a description of the code. |
 | Dates/times | UTC everywhere, formatted at the edge. A verdict log spanning timezones is unauditable. |
 | RTL | Not supported in v1. If a language requiring RTL is added, `dir="auto"` belongs on the finding-evidence container, where quoted source may contain RTL text regardless of UI language. |
 

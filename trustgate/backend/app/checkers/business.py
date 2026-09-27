@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.checkers.semantic import SemanticChecker
 from app.llm.client import Provider
-from app.schemas import CheckerTier
 
 FOCUS = """
 Business-logic and cryptographic defects. Look for: missing validation on values that drive
@@ -14,6 +13,4 @@ overflowed. Do not report anything the injection or access-control checkers alre
 
 
 def build(provider: Provider, max_diff_bytes: int) -> SemanticChecker:
-    checker = SemanticChecker("business", FOCUS, provider, max_diff_bytes)
-    checker.tier = CheckerTier.SEMANTIC
-    return checker
+    return SemanticChecker("business", FOCUS, provider, max_diff_bytes)

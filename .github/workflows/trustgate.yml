@@ -39,6 +39,37 @@ permissions:
   security-events: write
 
 jobs:
+  # A separate job, not a step in `gate`. A step would make a test failure block the security
+  # gate and skip its own SARIF upload -- a scanner that exits non-zero skipping its own upload
+  # is how findings vanish silently. Parallel jobs keep a red suite and a red gate independent,
+  # and both are still visible on the same PR.
+  #
+  # No new dependency: pytest is already pinned in trustgate/backend/requirements.txt, so this
+  # reuses the same install the gate already does.
+  # The suite is hermetic -- no test reads the network or a credential, and there is no skipif
+  # anywhere in it, so it needs no secret and runs identically on a fork PR.
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Shallow is fine here: no test needs history. test_integration.py reads the real
+      # trustgate.yml out of this checkout, which is what makes it a live check on the gate's
+      # own invariants rather than a fixture.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+
+      - name: Install engine dependencies
+        run: python -m pip install -r trustgate/backend/requirements.txt
+
+      - name: Run the test suite
+        run: python -m pytest tests/ -q
+        working-directory: trustgate/backend
+
   gate:
     name: Security gate
     runs-on: ubuntu-latest
@@ -108,7 +139,14 @@ jobs:
       # engine's real exit code, which `tee` swallows — and the liveness assert that uses it.
       - name: Run TrustGate
         env:
+          # Primary provider, then the fallback. Secrets by reference only -- no key value is
+          # ever written into this file. The engine degrades to REVIEW, never PASS, if neither
+          # resolves, so a missing secret is a visible failure rather than a silent pass.
+          WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          WATSONX_URL: https://us-south.ml.cloud.ibm.com
+          WATSONX_MODEL: ibm/granite-4-h-small
+          WATSONX_PROJECT_ID: ${{ vars.WATSONX_PROJECT_ID }}
           GITLEAKS_BIN: gitleaks
           # Suppress the two deliberately-planted fake secrets (.github/gitleaks.toml).
           # Scoped to this step on purpose so bench/ keeps detecting the corpus fixture.

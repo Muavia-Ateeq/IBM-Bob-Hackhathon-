@@ -117,15 +117,16 @@ A session that ends without a ledger update is a session whose knowledge is lost
 - Type hints on every function signature. No bare `Any` in new code.
 - Pydantic v2 models for every external boundary — LLM responses, HTTP requests, SARIF
   fields. An unvalidated boundary is a bug.
-- `async`/`await` throughout the request path; five checkers must run concurrently.
-- One shared `httpx.AsyncClient`, not one per checker.
+- `async`/`await` throughout the request path; all seven checkers must run concurrently.
+- One shared provider instance, not one per checker.
 - `subprocess` with an argument list. **Never `shell=True`.**
 - No inline comments. The code says what; `AI_CONTEXT.md` says why.
 
 ### React — `dashboard/`
 
-- TypeScript. Mirror the engine's Pydantic types in `types.ts`.
-- No inline user-facing string literals in JSX — all strings via `strings.ts`.
+- TypeScript. Mirror the engine's Pydantic types in `dashboard/src/lib/api.ts`.
+- No inline user-facing string literals in JSX — all strings via `strings.ts`. **NOT BUILT yet**;
+  the shipped components inline them. Do not claim the file exists.
 - Every verdict renders color **and** icon **and** text label. Never color alone;
   red/amber/green is unreadable for ~1 in 12 men with red-green color vision deficiency.
 - Respect `prefers-reduced-motion`.
@@ -135,7 +136,7 @@ A session that ends without a ledger update is a session whose knowledge is lost
 - `routes/` never imports `checkers/` internals
 - `adjudicator.py` never imports `llm/` — this is what makes the verdict deterministic
 - `checkers/` modules never import each other — independence is the signal
-- `dashboard/` never holds a Groq key — all inference is server-side
+- `dashboard/` never holds an LLM key of any kind — all inference is server-side
 
 ---
 
@@ -169,7 +170,8 @@ A session that ends without a ledger update is a session whose knowledge is lost
 - Gitleaks needs `fetch-depth: 0` on checkout — it scans history.
 - **Use `pull_request`, never `pull_request_target`,** if the workflow touches a secret.
   `pull_request_target` gets a writable token and repository secrets; checking out
-  fork-authored code under it is RCE with `GROQ_API_KEY` in reach. Under `pull_request` a
+  fork-authored code under it is RCE with `GROQ_API_KEY` and `WATSONX_API_KEY` in reach.
+  Under `pull_request` a
   fork gets no secrets and the semantic checkers degrade to `REVIEW`, which is written to the
   job summary. It is **not** posted as a PR comment: under `pull_request` a fork gets no
   token at all, and posting needs `pull_request_target` (the RCE above) or a GitHub App.

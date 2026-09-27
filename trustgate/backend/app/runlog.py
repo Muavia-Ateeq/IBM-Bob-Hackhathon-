@@ -52,11 +52,19 @@ def load_all_records(runs_dir: Path) -> tuple[list[RunRecord], list[str]]:
     return records, unreadable
 
 
-def load_results(runs_dir: Path, pr: str) -> tuple[list[CheckerResult], list[str], str]:
+def load_results(runs_dir: Path, pr: str) -> tuple[list[CheckerResult], int, str]:
+    """Results for one PR, the number of unreadable files in the directory, and a digest.
+
+    A file that fails to parse has no readable `pr`, so it cannot be attributed to this PR or
+    to any other. Only the count is returned, never the names: this function feeds the verdict
+    reason, which the gate writes into the PR job summary, and `runs/*.json` filenames embed
+    another PR's run_id and checker name. Counting is the honest answer — we can say how many
+    files we could not read, and cannot say whose they were.
+    """
     if not runs_dir.is_dir():
         raise FileNotFoundError(f"no such runs directory: {runs_dir}")
 
-    unreadable: list[str] = []
+    unreadable = 0
     by_run: dict[str, list[tuple[Path, bytes, RunRecord]]] = {}
 
     for path in sorted(runs_dir.glob("*.json")):
@@ -64,7 +72,7 @@ def load_results(runs_dir: Path, pr: str) -> tuple[list[CheckerResult], list[str
         try:
             record = RunRecord.model_validate_json(raw)
         except ValidationError:
-            unreadable.append(path.name)
+            unreadable += 1
             continue
         if record.pr != pr:
             continue
@@ -76,7 +84,7 @@ def load_results(runs_dir: Path, pr: str) -> tuple[list[CheckerResult], list[str
     # `run_%Y%m%d_%H%M%S`, so the max is the newest run lexicographically.
     results: list[CheckerResult] = []
     digest = hashlib.sha256()
-    for _path, raw, record in sorted(by_run.get(max(by_run, default=""), [])):
+    for _, raw, record in sorted(by_run.get(max(by_run, default=""), [])):
         digest.update(raw)
         results.append(record.result)
 
@@ -88,12 +96,23 @@ def compute_verdict(pr: str, runs_dir: Path | str = DEFAULT_RUNS_DIR) -> Verdict
     verdict, reason, degraded_checkers = adjudicate(results)
 
     if unreadable:
-        reason = f"{reason}; {len(unreadable)} unreadable run file(s): {', '.join(unreadable)}"
+        reason = f"{reason}; {unreadable} unattributable unreadable run file(s)"
+        if verdict is Verdict.PASS:
+            # Fail-closed. A file we cannot parse is a checker whose result is unaccounted
+            # for, which is the same condition adjudicate() refuses to PASS on. This is not
+            # hypothetical: `write_run_records` writes one file per checker with no atomic
+            # rename, so a killed process leaves a truncated record, and the readable ones
+            # still look perfectly clean. Reporting the count in the reason is not enough --
+            # the gate's final step greps for BLOCK, so a PASS merges the PR. The file stays
+            # unnamed above: a corrupt record cannot say which PR it was, and its filename
+            # would republish another PR's run_id and checker name into the job summary.
+            verdict = Verdict.REVIEW
+            reason = f"a checker result could not be read, so the run is not verified; {reason}"
 
     return VerdictRecord(
         verdict=verdict,
         reason=reason,
-        degraded=bool(degraded_checkers) or not results,
+        degraded=bool(degraded_checkers) or bool(unreadable) or not results,
         degraded_checkers=degraded_checkers,
         findings=[finding for result in results for finding in result.findings],
         results=results,
