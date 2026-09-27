@@ -1,4 +1,4 @@
-const BASE_URL = "https://trustgate-api-ehib.onrender.com";
+const BASE_URL = import.meta.env.VITE_API_URL || "https://trustgate-api-ehib.onrender.com";
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 export type Verdict = "PASS" | "REVIEW" | "BLOCK";
