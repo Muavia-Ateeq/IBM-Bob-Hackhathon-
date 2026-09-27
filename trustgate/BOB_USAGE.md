@@ -27,14 +27,14 @@ This document records how M. Muavia used IBM Bob during the TrustGate build.
 ### Task 4: Security Reviewer — issues 02, 03, 04, 10
 - **Bob feature used**: Agent mode (Security Reviewer prompt)
 - **Branches**: `issue-02-hardcoded-key`, `issue-03-sql-injection`, `issue-04-missing-auth`, `issue-10-debug-enabled`
-- **Result**: 4 high findings — hardcoded key, SQL injection, IDOR, Flask DEBUG=True.
+- **Result**: 4 high findings — hardcoded key, SQL injection, IDOR, Flask DEBUG=True. **3 of these 4 are now out of scope**: `security_reviewer` was narrowed on 2026-09-27 to production debug/verbose configuration only and explicitly refuses secrets, injection and authz as owned by other checkers. Only `Flask DEBUG=True` (issue-10) survives the narrowing. These transcripts predate it.
 - **Output**: `runs/sec_001.json` through `runs/sec_005.json`
 - **Screenshot**: `screenshots/muavia_4.png`
 
 ### Task 5: False-positive check — clean branches
 - **Bob feature used**: Agent mode (both checkers)
 - **Branches**: `clean-01`, `clean-02`, `clean-03`
-- **Result**: 0 findings on all 3 clean branches. False-positive rate = 0%.
+- **Result**: 0 findings on all 3 clean branches. **This is not a false-positive rate** — these are 3 hand-picked clean branches through one Bob session, not the `bench/` corpus, and no command in this repository reproduces them. No FP rate has been measured. See WEDGE.md claim 3.
 - **Output**: `runs/sec_clean_*.json`, `runs/spec_clean_*.json`
 - **Screenshot**: `screenshots/muavia_5.png`
 

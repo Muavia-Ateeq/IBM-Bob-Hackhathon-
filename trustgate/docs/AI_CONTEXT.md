@@ -140,7 +140,7 @@ tab is what verifies it.
     │   │   ├── sarif.py           # Finding → SARIF 2.1.0 — BUILT, never uploaded
     │   │   └── schemas.py         # Pydantic request/response contracts
     │   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
-    │   ├── tests/                 # 108 passing across 11 files
+    │   ├── tests/                 # 110 passing across 11 files
     │   ├── requirements.txt       # Pinned installed set
     │   └── pyproject.toml         — NOT BUILT
     ├── demo_target/           # Labelled corpus — BUILT, never run against a live checker
@@ -184,8 +184,11 @@ fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.
 | 7 | `spec_conformance` | 2 | Code measured against the product requirements themselves (password hashing, rate limiting, no hardcoded keys, no debug mode) | LLM |
 
 `security_reviewer` and `spec_conformance` were implemented by M. Muavia from his IBM Bob
-subagent prompts in `trustgate/docs/muavia_prompts/`, and both are wired to the shared
-`SemanticChecker` rather than each carrying their own provider plumbing. `app.main.CHECKER_MODULES`
+subagent prompts in `trustgate/docs/muavia_prompts/`. `security_reviewer` is wired to the shared
+`SemanticChecker`. `spec_conformance` is **not** — it is a two-step checker (Step A extracts
+quotable requirements from its inline `PRD_TEXT`, Step B checks the diff against them) with its
+own `REQUIREMENTS_SCHEMA` and its own two provider calls, because a checker that invents its own
+requirements is a checker that invents its own findings. `app.main.CHECKER_MODULES`
 is the single roster tuple; `trustgate/bench/run_benchmark.py` derives its checker list from it
 and a parity test in `tests/test_bench_scoring.py` fails if the two ever diverge.
 

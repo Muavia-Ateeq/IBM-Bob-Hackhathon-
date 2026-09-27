@@ -84,7 +84,7 @@ python app/main.py --serve               # then: curl localhost:8000/api/health
 python -m app.runlog --pr 42 --runs-dir runs
 
 # the tests
-python -m pytest tests/ -v               # 108 passing
+python -m pytest tests/ -v               # 110 passing
 ```
 
 `samples/example.diff` is a small PR carrying a SQL injection, a missing-authorization gap, and a
@@ -157,7 +157,8 @@ execution with a trust boundary attached.
 > model. The Tier 1 deterministic checker, `secrets`, runs the real gitleaks binary and does
 > produce real findings. The eighth checker, `deps`, is not started.
 
-Two of the seven checkers are meant to be deterministic scanners, not models. That is deliberate.
+One of the seven checkers is a deterministic scanner, not a model. That is deliberate — the
+eighth, `deps`, would be the second.
 
 A leaked API key and a known CVE are **facts with answers**. Spending a model call to
 rediscover them is slower, costlier, and less accurate than a scanner built for exactly
@@ -222,12 +223,15 @@ Eight are planned; seven are built, and **one of the seven has produced a real f
 | `injection` | SQL/command injection, XSS, SSRF, unsafe deserialization | 2 | LLM | built — never run, no API key (K12) |
 | `prompt_injection` | Untrusted text concatenated into a model instruction; agent-directed repo content | 2 | LLM | built — never run, no API key (K12) |
 | `business` | Business-logic flaws, race conditions, crypto misuse | 2 | LLM | built — never run, no API key (K12) |
-| `security_reviewer` | General security review of the diff | 2 | LLM | built — never run, no API key (K12) |
+| `security_reviewer` | Debug/verbose mode left enabled in production config. Narrow by design — it explicitly **excludes** secrets, injection, authz, deserialization and crypto, which other checkers own | 2 | LLM | built — never run, no API key (K12) |
 | `spec_conformance` | Whether the diff matches the stated requirement | 2 | LLM | built — never run, no API key (K12) |
 | `deps` | Known CVEs in Python and npm dependencies | 1 | OSV-Scanner, deterministic | **not built** — blocked, see K13 |
 
 `security_reviewer` and `spec_conformance` were contributed by M. Muavia from his IBM Bob
-subagent prompts and wired to the same `SemanticChecker` as the other four. Neither is named by
+subagent prompts. `security_reviewer` is wired to the same `SemanticChecker` as the other four;
+`spec_conformance` is a two-step checker of its own (Step A extracts quotable requirements from
+its inline `PRD_TEXT`, Step B checks the diff against them), because a checker that invents its
+own requirements is a checker that invents its own findings. Neither is named by
 any case in `trustgate/bench/cases.json`, so **neither is measured** — see [Results](#results).
 
 Every checker implements one interface (`trustgate/backend/app/checkers/base.py`), so adding an
@@ -335,7 +339,7 @@ checker design, are in [`trustgate/docs/AI_CONTEXT.md`](trustgate/docs/AI_CONTEX
 | `trustgate/backend/requirements.txt` | The pinned installed set |
 | `.github/workflows/trustgate.yml` | The gate — runs the engine on every PR, uploads SARIF, fails the run on `BLOCK` |
 | `render.yaml`, `Procfile` | Deploy config for `trustgate-api` on Render |
-| `screenshots/` | Demo images for the README — **empty** |
+| `screenshots/` | 10 demo images — `muavia_1..5`, `areeba_01..02`, `bilal_01..03`. Referenced from `trustgate/BOB_USAGE.md` |
 | `trustgate/demo_target/` | Labelled corpus, one planted defect per case — **built, never run against a live checker** |
 | `trustgate/bench/` | Ground truth (`cases.json`) and the measurement runner — **built; reports `INCOMPLETE`** |
 
@@ -347,7 +351,7 @@ mode this project exists to catch.
 
 | Missing | Consequence |
 |---|---|
-| **A green run of the gate** | The workflow **has executed on GitHub** and the last 5 runs all **failed**. An earlier pair of failures was a config bug, not a finding: `.github/gitleaks.toml` allowlisted the two planted fixtures with `^`-anchored regexes while the engine scans `--workspace ..`, so the paths arrived as `../backend/...` and the allowlist matched nothing. The scanner then found TrustGate's own deliberately planted fakes and the gate blocked them. Fixed in `a04438b`. The SARIF upload step carries `if: always()` and did run, but **no run has yet completed green**, so the Code Scanning path is still unproven end to end. CI is **UNVERIFIED** — a `tests` job running the 108-test suite was added on this branch and has not executed yet. |
+| **A green run of the gate** | The workflow **has executed on GitHub** and the last 5 runs all **failed**. An earlier pair of failures was a config bug, not a finding: `.github/gitleaks.toml` allowlisted the two planted fixtures with `^`-anchored regexes while the engine scans `--workspace ..`, so the paths arrived as `../backend/...` and the allowlist matched nothing. The scanner then found TrustGate's own deliberately planted fakes and the gate blocked them. Fixed in `a04438b`. The SARIF upload step carries `if: always()` and did run, but **no run has yet completed green**, so the Code Scanning path is still unproven end to end. CI is **UNVERIFIED** — a `tests` job running the 110-test suite was added on this branch and has not executed yet. |
 | **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `trustgate/docs/SYSTEM_LEDGER.md` K13. |
 | **A deployment of the dashboard** | `dashboard/` is built and merged — `npm ci` reports 0 vulnerabilities and `npm run build` succeeds — but **nothing is deployed**. No Vercel deployment has happened, so `vercel.json` at the root still has nothing to build. |
 | **Labelled corpus** | The corpus and its runner are built (`trustgate/demo_target/`, `trustgate/bench/`), 9 of 10 fixtures planted. **No false-positive rate is claimed** — the runner still reports `OVERALL: INCOMPLETE - 7 of 7 checkers did not complete`, because the six LLM checkers cannot run without `WATSONX_API_KEY` or `GROQ_API_KEY`. `secrets` alone is measured, on a **1-case sample**, which is too small to publish as a rate. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
@@ -363,7 +367,7 @@ never run against a live model. The six LLM checkers still degrade to `REVIEW` w
 credential, and a degraded run is never a `PASS` — so a clean `PASS` remains undemonstrated, and
 that is stated here rather than papered over.
 
-What *is* built and tested (**108 tests**): the deterministic adjudicator, the fail-closed
+What *is* built and tested (**110 tests**): the deterministic adjudicator, the fail-closed
 contract including its two closed bypasses, the schema-level evidence guarantees, the
 quote-must-exist-in-the-diff check, a run log that round-trips a verdict through disk, a SARIF
 converter validated against both the OASIS schema and GitHub's stricter requirements, the
@@ -417,8 +421,10 @@ in under two minutes.
 
 ## Team
 
-Six people, 48 hours. **Rows B and E are filled from git authorship** — the two workstreams with
-commits attributable to a named author. The rest stay `_unassigned`: every one of the 14 commits
+Six people, 48 hours. **Rows B, E, G and H carry a name** — the four the repo can actually
+evidence. B and E come from git authorship. G and H come from files in the tree that carry the
+contributor's own name: the IBM Bob subagent prompts in `trustgate/docs/muavia_prompts/` and
+`trustgate/screenshots/bilal_*.png`. The rest stay `_unassigned`: every one of the 14 commits
 on `main` is authored by Ammar Zia, so there is no repository evidence naming a separate owner for
 them, and a name written here that nobody owns would be a fabrication in the one document judges
 read. Replace them with the real names before submitting.
@@ -431,9 +437,12 @@ read. Replace them with the real names before submitting.
 | D | _unassigned_ | `.github/workflows/`, `sarif.py` | The gate and the Code Scanning upload |
 | E | Areeba Ghaffar | `dashboard/` | React/Vite UI — **built and merged from PR #2; not deployed** |
 | F | _unassigned_ | `trustgate/demo_target/` + `trustgate/bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12** |
+| G | M. Muavia | `trustgate/backend/app/checkers/` | `security_reviewer` and `spec_conformance`, implemented from his IBM Bob subagent prompts in `trustgate/docs/muavia_prompts/` — **neither is measured**: no case in `bench/cases.json` names either |
+| H | Bilal | `trustgate/PRD.pdf`, `trustgate/policy.pdf`, `trustgate/screenshots/bilal_01..03.png` | The product requirements and policy documents, plus the demo screenshots |
 
-The workstream column is real: it is the Phase 3 split in `trustgate/docs/PROJECT_ROADMAP.md`, and
-one of the six is unstarted — `deps`.
+Rows A–F are the workstream split in `trustgate/docs/PROJECT_ROADMAP.md`, and one of them is
+unstarted — `deps`. Rows G and H sit outside that split: they are contributions to workstreams
+already claimed above, not separate phases.
 
 ---
 

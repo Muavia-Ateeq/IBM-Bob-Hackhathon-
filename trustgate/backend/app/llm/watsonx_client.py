@@ -30,6 +30,13 @@ class WatsonxProvider:
     `chat()` returns no token usage, so `Completion` token counts stay 0. `checkers/semantic.py`
     already discards them, so nothing downstream is starved by that.
 
+    Constructing `ModelInference` **makes a network call**: it authenticates against IAM
+    immediately and raises `InvalidCredentialsError` for a bad key. That is the single most
+    likely first-run failure, and it is not an import error, so it is translated into
+    `ProviderUnavailable` here rather than left to escape — `build_provider` catches that one
+    type to decide IBM is unusable and fall through to Groq, and an untranslated credential
+    error would kill the whole run instead of degrading it.
+
     UNVERIFIED — no watsonx credential has ever existed in this environment, so no call has
     been made. Whether `ibm/granite-4-h-small` honours `response_format` strict mode is
     therefore unknown; if it returns best-effort JSON instead, the Pydantic validation and the
@@ -57,13 +64,19 @@ class WatsonxProvider:
                 "watsonx.ai requires one to scope the request"
             )
 
-        self._model = ModelInference(
-            model_id=model_id,
-            credentials=Credentials(url=url, api_key=api_key),
-            project_id=project_id,
-            space_id=space_id,
-            max_retries=MAX_RETRIES,
-        )
+        try:
+            self._model = ModelInference(
+                model_id=model_id,
+                credentials=Credentials(url=url, api_key=api_key),
+                project_id=project_id,
+                space_id=space_id,
+                max_retries=MAX_RETRIES,
+            )
+        except Exception as exc:
+            raise ProviderUnavailable(
+                f"watsonx.ai rejected the credentials or could not authenticate: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         self.model_id = model_id
 
     async def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> Completion:

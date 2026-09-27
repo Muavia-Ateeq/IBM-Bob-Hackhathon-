@@ -53,10 +53,11 @@ Concretely, three things — none of which the four overlapping live submissions
    "high accuracy". A number, the corpus it came from, and the command that regenerates it.
    **Harness built, number not yet produced.** `demo_target/` holds one planted defect per
    case and `bench/` holds the ground truth and the runner; `python bench/run_benchmark.py`
-   regenerates the figure. It currently ends `INCOMPLETE` and prints no rate, because four
-   of five checkers need `GROQ_API_KEY` (K12) and the fifth needs the gitleaks binary
-   (K14). **No false-positive rate has been measured, and none is claimed anywhere in this
-   repository.** The `Results` section of the README is deliberately empty for this reason.
+   regenerates the figure. It currently ends `INCOMPLETE` and prints no rate, because six
+   of seven checkers need `WATSONX_API_KEY` or `GROQ_API_KEY` (K12) and the seventh needs
+   the gitleaks binary (K14). **No false-positive rate has been measured, and none is
+   claimed anywhere in this repository.** The `Results` section of the README is
+   deliberately empty for this reason.
    The number appears here with the harness that produced it, or not at all.
 
 The mechanism behind all three is the same: **separate what has a ground truth from what
@@ -73,29 +74,31 @@ no pull request and no key:
 
 ```
 GITLEAKS_BIN=backend/.tools/gitleaks.exe python bench/run_benchmark.py
-# -> issue-02-hardcoded-key  BLOCK  secrets  tp  precision 1.00  recall 1.00
+# -> issue-02-hardcoded-key  BLOCK  secrets  tp  precision 1.00  recall 1.00  (n=1 — harness demo, not a rate)
 ```
 
-Every run that reaches a reviewer without `GROQ_API_KEY` still degrades to `REVIEW` for the
-other three checkers. See `README.md` → *Not built* for exactly what has and has not run.
+Every run that reaches a reviewer without `WATSONX_API_KEY` or `GROQ_API_KEY` still degrades
+to `REVIEW` for the other six checkers. See `README.md` → *Not built* for exactly what has
+and has not run.
 
-1. `python app/main.py --diff samples/example.diff` with `GROQ_API_KEY` set. Wall-clock appears.
+1. `python app/main.py --diff samples/example.diff` with `WATSONX_API_KEY` (or `GROQ_API_KEY`)
+   set. Wall-clock appears.
 2. Findings print, each with its file, line, and quoted source line.
 3. The verdict reads `PASS`, `REVIEW`, or `BLOCK`, and the reason names the finding that
    decided it.
-4. **Re-run the identical command with the key unset.** All three checkers degrade. The
-   verdict reads `REVIEW` — never `PASS` — and the output names each unavailable checker
-   and why.
+4. **Re-run the identical command with the key unset.** All six semantic checkers degrade.
+   The verdict reads `REVIEW` — never `PASS` — and the output names each unavailable
+   checker and why.
 5. **"Most gates print PASS here. This one refuses to, and tells you which of its own
    checkers it could not run."**
 
 Step 4 is the demo. It is the part no competitor shows, and it is the part that proves the
 product is honest.
 
-> **Steps 1–3 as a real `BLOCK` are unverified.** No `GROQ_API_KEY` was available in the
-> environment where this was written, so the model call has never executed end to end. The
-> degradation path in step 4 *was* run and its output is in the session log. `UNVERIFIED —
-> one run of this command with a key set.`
+> **Steps 1–3 as a real `BLOCK` are unverified.** No `WATSONX_API_KEY` or `GROQ_API_KEY` was
+> available in the environment where this was written, so the model call has never executed
+> end to end. The degradation path in step 4 *was* run and its output is in the session log.
+> `UNVERIFIED — one run of this command with a key set.`
 
 ## Anti-goals — what we are explicitly not building
 
@@ -133,7 +136,7 @@ results.
 
 | Claim | How it is falsified | State |
 |-------|---------------------|-------|
-| Fails safe | Inject a fault into each checker. If any yields `PASS`, the claim is false | **Run for 3 of 3 checkers** — `test_degraded_error_never_yields_pass`, `test_degraded_timeout_never_yields_pass`. No fault-injection harness for the network path yet |
+| Fails safe | Inject a fault into each checker. If any yields `PASS`, the claim is false | **Run for 3 of 3 checkers** — the three that existed when the test was written, not a claim about today's 7-checker roster — `test_degraded_error_never_yields_pass`, `test_degraded_timeout_never_yields_pass`. No fault-injection harness for the network path yet |
 | Deterministic | Run the same diff 20×. If any verdict differs, the claim is false | **Adjudicator only.** `test_adjudicator_is_pure` proves the verdict function is deterministic. The 20× run against the *model* has not happened — no API key |
 | Evidence-complete | Emit findings. If any lacks file+line+quote, the claim is false | **Run** — `line < 1`, empty evidence, and path traversal are all asserted to raise `ValidationError` |
 | Measurable | Run the corpus. If the false-positive rate cannot be computed, the claim is false | **Not run.** The corpus now exists (`demo_target/` + `bench/`, 9 of 10 fixtures planted) and the runner reports `INCOMPLETE` with no rate, because K12 is open. One key closes it — K14 is closed |

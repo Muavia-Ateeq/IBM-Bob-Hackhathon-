@@ -154,8 +154,18 @@ records that were adjudicated (`runlog.py:79-83`). The SARIF report is built fro
 verdict **read back off disk**, not from the in-memory results (`main.py:118-122`), so the
 report and the run log cannot disagree about what happened.
 
-A run file that fails validation is **skipped and named** in `reason` — never silently
-dropped. A silently dropped record is a silently dropped finding.
+A run file that fails validation is **skipped, counted, and never named** in `reason`. A
+silently dropped record is a silently dropped finding, so the count is surfaced as
+`"; N unattributable unreadable run file(s)"` (`runlog.py:99`). The names are deliberately
+withheld: an unreadable record has no readable `pr`, so it cannot be attributed to any pull
+request, and `runs/*.json` filenames embed another PR's run_id and checker name, which the
+gate would republish into this PR's job summary.
+
+**It is fail-closed.** If the verdict would otherwise have been `PASS`, it is upgraded to
+`REVIEW` — "a checker result could not be read, so the run is not verified"
+(`runlog.py:100-110`) — and `degraded` is set either way. This is not hypothetical:
+`write_run_records` writes one file per checker with no atomic rename, so a killed process
+leaves a truncated record while the readable ones still look perfectly clean.
 
 ---
 
