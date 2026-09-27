@@ -67,7 +67,10 @@ def test_every_field_github_marks_required_is_present_and_non_empty() -> None:
 def test_a_clean_run_still_carries_a_populated_rule_catalogue() -> None:
     rules = to_sarif(_record(), "42")["runs"][0]["tool"]["driver"]["rules"]
     assert rules, "GitHub marks rules[] required on the driver; a clean run must not empty it"
-    assert {rule["id"] for rule in rules} == {f"trustgate/{name}" for name in ("authz", "business", "injection", "secrets")}
+    assert {rule["id"] for rule in rules} == {
+        f"trustgate/{name}"
+        for name in ("authz", "business", "injection", "prompt_injection", "secrets")
+    }
 
 
 def test_results_carry_the_fields_github_marks_required() -> None:

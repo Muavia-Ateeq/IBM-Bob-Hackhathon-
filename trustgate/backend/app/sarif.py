@@ -37,6 +37,7 @@ _PRECISION = {
     "secrets": "very-high",
     "authz": "medium",
     "injection": "medium",
+    "prompt_injection": "medium",
     "business": "medium",
 }
 
@@ -52,6 +53,11 @@ _DESCRIPTIONS = {
     "injection": (
         "Injection vulnerabilities",
         "Untrusted input reaches an interpreter — SQL, shell, a template, a deserializer. Model-derived.",
+    ),
+    "prompt_injection": (
+        "Prompt injection and instruction-hierarchy violations",
+        "Externally-sourced text is concatenated into a model instruction with no delimiter and no "
+        "statement that it is untrusted data, so the data can issue instructions. Model-derived.",
     ),
     "business": (
         "Business-logic flaws",

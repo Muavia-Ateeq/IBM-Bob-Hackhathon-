@@ -17,9 +17,10 @@ A default run today reports:
 secrets     SKIPPED    FileNotFoundError: [WinError 2] ... — no rate reported
 authz       SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
 injection   SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
+prompt_injection SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
 business    SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate reported
 
-OVERALL: INCOMPLETE - 4 of 4 checkers did not complete.
+OVERALL: INCOMPLETE - 5 of 5 checkers did not complete.
 ```
 
 That is the correct output, and it is what the runner produced with no
@@ -37,11 +38,11 @@ GITLEAKS_BIN="$PWD/.tools/gitleaks.exe" ./.venv/Scripts/python.exe ../bench/run_
 ```
 issue-02-hardcoded-key        BLOCK   secrets     tp     hardcoded credential
   secrets    MEASURED   TP 1  FP 0  FN 0  precision 1.00  recall 1.00
-OVERALL: INCOMPLETE - 3 of 4 checkers did not complete.
+OVERALL: INCOMPLETE - 4 of 5 checkers did not complete.
 ```
 
 **n=1. That is a demonstration that the harness measures, not an accuracy
-claim**, and the `INCOMPLETE` line stays because three checkers genuinely did not
+claim**, and the `INCOMPLETE` line stays because four checkers genuinely did not
 run. Do not quote a precision from a single case.
 
 **The contract the runner enforces.** Three rules, all of them the same idea
@@ -50,9 +51,9 @@ applied at three levels:
 1. A checker that did not complete OK on **every** case gets no precision and no
    recall — only the reason it failed.
 2. A case is not scored if the checkers that could have changed its score did not
-   finish. For a case with an `expected_checker`, that is *that* checker — three
-   unrelated LLM checkers being down says nothing about whether `secrets` found
-   the defect, so a correct finding is not thrown away (K22). A case that expects
+   finish. For a case with an `expected_checker`, that is *that* checker — the
+   four unrelated LLM checkers being down says nothing about whether `secrets`
+   found the defect, so a correct finding is not thrown away (K22). A case that expects
    **clean** is the opposite: any checker at all could have raised the false
    positive being ruled out, so one degraded checker disqualifies it.
    Scoring "no findings" from a run where nothing finished as a false negative is
@@ -85,27 +86,21 @@ Two details that are easy to get wrong and are load-bearing:
   so `backend/` has to be on `sys.path`; the workspace path is passed
   engine-relative.
 
-## `PYTHONIOENCODING` is set for the subprocess — a real engine bug
+## `PYTHONIOENCODING` is set for the subprocess
 
-The runner sets `PYTHONIOENCODING=utf-8` in the child environment because
-`app/main.py:26`'s progress logger prints `→` (U+2192). Under a pipe on Windows
-Python falls back to cp1252 and `_log` raises:
+The runner sets `PYTHONIOENCODING=utf-8` in the child environment as
+belt-and-braces.
 
-```
-UnicodeEncodeError: 'charmap' codec can't encode character '→' at position 11
-  File "engine\app\main.py", line 26, in _log
-```
+This used to be load-bearing. The engine's progress logger prints `→`
+(U+2192), and under a pipe on Windows Python falls back to cp1252, so
+`python app/main.py … | tee` and any CI step capturing output died with
+`UnicodeEncodeError` before a single run record was written. `SYSTEM_LEDGER.md`
+K24 records the fix, landed 2026-09-26: `app/main.py` now reconfigures both of
+its streams to utf-8 at import, so the engine is unpipeable no longer.
 
-`SYSTEM_LEDGER.md` records "Emoji survive stdout on this platform — checked, not
-assumed". That check was real but narrower than it reads: it holds for an
-interactive terminal, where stdout is utf-8, and **not** for a pipe. So
-`python app/main.py … | tee` and any CI step capturing output dies on Windows.
-
-**The one-line fix belongs in the engine, not here** — `sys.stdout.reconfigure(
-encoding="utf-8")` at the top of `main()`, or an `errors="replace"` on the
-logger. It has not been applied: it is outside the scope this runner was built
-under. Until it is, the workaround lives in the harness and the engine remains
-unpipeable on Windows.
+The variable stays set because the engine's fix is a runtime behaviour and a
+harness that leaned on it without setting it would be one refactor away from
+silently losing a run's output.
 
 The runner also scans the child's stderr for `Traceback` before trusting its
 exit code. The engine exits 1 on `BLOCK`, and an unhandled crash also exits 1 —

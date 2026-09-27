@@ -17,20 +17,25 @@ python bench/run_benchmark.py               # measure what can be measured
 ## Why these cases and not the ones the prompts asked for
 
 The case-to-checker assignment was made by reading the `FOCUS` string in each
-checker (`backend/app/checkers/*.py`), not by matching case names. Three cases
-have **no checker at all**, and that is the corpus doing its job rather than
+checker (`trustgate/backend/app/checkers/*.py`), not by matching case names. Two
+cases have **no checker at all**, and that is the corpus doing its job rather than
 failing to:
 
 | Case | Expected | Why |
 |---|---|---|
 | `issue-01-fake-package` | none | `deps.py` is unbuilt and blocked on K13 — OSV-Scanner's JSON carries no line number |
 | `issue-07-license-violation` | none | No `FOCUS` mentions licensing. A license checker was specified in a pasted prompt and declined (`SYSTEM_LEDGER.md`, decline 10) |
-| `issue-06-prompt-injection` | `injection`, **disputed** | `injection`'s FOCUS says "template injection", and a string-built prompt is a template. Equally, no FOCUS mentions prompt injection. Recorded as disputed rather than quietly resolved |
 
-Two more are marked `disputed`: `issue-08-no-rate-limit` (`business` vs `authz`)
+Two are marked `disputed`: `issue-08-no-rate-limit` (`business` vs `authz`)
 and `issue-10-debug-enabled` (`authz` vs `business`). A disputed case is one the
 corpus does not get to declare a clean miss on, and it is the most useful kind of
 row in a false-positive benchmark.
+
+`issue-06-prompt-injection` was a third disputed case until `prompt_injection`
+landed. Its rationale said no `FOCUS` in the roster named prompt injection, and
+`injection` could fairly claim a string-built prompt as a template — so the
+assignment went to `prompt_injection` and the dispute closed on the evidence
+rather than by preference.
 
 ## `issue-02-hardcoded-key` and the gate's allowlist
 
