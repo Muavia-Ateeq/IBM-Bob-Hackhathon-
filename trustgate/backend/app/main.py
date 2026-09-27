@@ -16,14 +16,13 @@ for _stream in (sys.stdout, sys.stderr):
 
 from app.adjudicator import SEVERITY_ORDER, adjudicate
 from app.checkers import authz, business, injection, secrets
+from app.checkers import security_reviewer, spec_conformance
 from app.checkers.base import Checker, run_all
 from app.config import Settings, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
 from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, write_run_records
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
-from checkers.security_reviewer import checker as security_reviewer
-from checkers.spec_conformance import checker as spec_conformance
 
 CHECKER_MODULES = (secrets, authz, injection, business, security_reviewer, spec_conformance)
 
