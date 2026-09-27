@@ -40,4 +40,20 @@ paths = [
   # test_the_secret_itself_never_reaches_the_finding, which is the regression test
   # proving the engine cannot leak a credential.
   '''(^|/)backend/tests/test_secrets\.py$''',
+  # The third finding in the same local reproduction:
+  # `backend/tests/__pycache__/test_secrets.cpython-314-pytest-9.1.1.pyc` -- the SAME
+  # planted fake key already allowlisted above, compiled. Not a second secret: a derived
+  # copy of the first. It is a build artifact that no test run in CI can avoid producing,
+  # so leaving it out keeps the gate red for a reason no human introduced.
+  #
+  # Deliberately ONE file, not the `__pycache__/` directory and not `\.pyc$`. The tree
+  # holds 1500+ `.pyc` files (mostly under `.venv/`) and every one of them stays
+  # scanned. An allowlist is a statement about a specific known artifact; a
+  # directory-wide pattern would be a blanket exemption wearing a specific one's name.
+  # The `.*` covers the tag CPython appends, which embeds the interpreter AND the pytest
+  # version, so it differs on the CI runner.
+  # UNVERIFIED: the re-scan confirming this matches the engine's actual reported path was
+  # blocked by the tool permission layer this session. The path above was read off the
+  # real tree with Glob; the first PR after this commit is the check.
+  '''(^|/)backend/tests/__pycache__/test_secrets\..*\.pyc$''',
 ]
