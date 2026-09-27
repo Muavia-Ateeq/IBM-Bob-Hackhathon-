@@ -39,3 +39,24 @@ FINDING_SCHEMA: dict[str, Any] = {
         }
     },
 }
+
+REQUIREMENTS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["requirements"],
+    "properties": {
+        "requirements": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["requirement_id", "quote", "plain_description"],
+                "properties": {
+                    "requirement_id": {"type": "string"},
+                    "quote": {"type": "string"},
+                    "plain_description": {"type": "string"},
+                },
+            },
+        }
+    },
+}
