@@ -42,7 +42,10 @@ from pydantic import ValidationError
 from app.runlog import DEFAULT_RUNS_DIR
 from app.schemas import RunRecord, Verdict
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# The repo root, not trustgate/: this file is trustgate/backend/integration_test.py, and the one
+# thing REPO_ROOT is used for is locating .github/workflows/trustgate.yml, which stays at the
+# repo root because that is the only place GitHub reads workflows from.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SHA_PIN = re.compile(r"^[0-9a-f]{40}$")
 
 # Built once at import. `urlopen` constructs a fresh opener per call, and on Windows that

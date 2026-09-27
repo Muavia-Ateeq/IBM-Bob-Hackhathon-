@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from integration_test import check_gate
 
-REAL_WORKFLOW = Path(__file__).resolve().parent.parent.parent / ".github/workflows/trustgate.yml"
+REAL_WORKFLOW = Path(__file__).resolve().parents[3] / ".github/workflows/trustgate.yml"
 
 # `check_gate` is the one piece of the smoke test that can silently stop working: it is the
 # thing standing between a weakened gate and a merge, and a parser change that made it

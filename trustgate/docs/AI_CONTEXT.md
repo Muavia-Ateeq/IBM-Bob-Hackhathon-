@@ -93,63 +93,64 @@ tab is what verifies it.
 ### Directory hierarchy
 
 ```
-/
-├── AGENTS.md                  # Pointer to docs/AGENTS.md, so root-loading tools find the rules
-├── docs/                       # Governance — all of it, one directory
-│   ├── AI_CONTEXT.md           # This file — constitution
-│   ├── PROJECT_ROADMAP.md      # Phases, one ACTIVE at a time
-│   ├── SYSTEM_LEDGER.md        # Memory — state, file history, next actions
-│   ├── AGENTS.md               # Portable agent rules (all tools)
-│   ├── WEDGE.md                # Positioning, demo script, falsifiable claims
-│   └── CONTRACT.md             # The HTTP surface the engine writes
-├── .bob/rules/                # Bob-native rules (IBM Bob IDE only)
-│   ├── 00-authenticity.md
-│   ├── 01-planning-governance.md
-│   ├── 02-session-continuity.md
-│   └── 03-scope-control.md
+/                                    # REPO ROOT — read by path from here, so it cannot move:
+├── AGENTS.md                  #   pointer to trustgate/docs/AGENTS.md, for root-loading tools
+├── .github/workflows/trustgate.yml  # the gate — written, NEVER RUN (ledger K20)
+├── .github/gitleaks.toml      #   gate-only allowlist; outside the scan target on purpose (3a)
 ├── render.yaml                 # Render blueprint — LIVE at trustgate-api-ehib.onrender.com
-├── Procfile                    # Same start command, for any Procfile host
-├── screenshots/               # Demo images — empty
-├── .github/workflows/trustgate.yml  # The gate — written, NEVER RUN (ledger K20)
-├── backend/                    # Python/FastAPI verdict engine — BUILT
-│   ├── app/
-│   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
-│   │   ├── checkers/          # One module per checker. See roster below.
-│   │   │   ├── base.py        # Checker protocol, timeout, asyncio.gather fan-out
-│   │   │   ├── semantic.py    # The shared Tier 2 LLM checker
-│   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT, never run
-│   │   │   ├── authz.py       # Tier 2 — LLM
-│   │   │   ├── injection.py   # Tier 2 — LLM
-│   │   │   ├── business.py    # Tier 2 — LLM
-│   │   │   ├── deps.py        # Tier 1 — OSV-Scanner — NOT BUILT (blocked, ledger K13)
-│   │   │   └── CONTRIBUTING.md # The contract every checker author implements
-│   │   ├── adjudicator.py     # Deterministic verdict. No LLM in this path.
-│   │   ├── llm/               # Groq client (strict mode), FINDING_SCHEMA
-│   │   ├── runlog.py          # runs/*.json — write records, recompute a verdict from disk
-│   │   ├── comment.py         # VerdictRecord → PR comment. Local, NOT wired into the gate
-│   │   ├── config.py          # Settings, env-overridable
-│   │   ├── sarif.py           # Finding → SARIF 2.1.0 — BUILT, never uploaded
-│   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
-│   │   └── schemas.py         # Pydantic request/response contracts
-│   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
-│   ├── tests/                 # 81 passing across 8 files
-│   ├── requirements.txt       # Pinned installed set
-│   └── pyproject.toml         — NOT BUILT
-├── demo_target/               # Labelled corpus — BUILT, never run against a live checker
-│   ├── base/                  # The clean app every fixture is a one-defect copy of
-│   └── issue-NN-*/            # One planted defect each; 3 have no checker, 2 are disputed
-├── bench/                     # Ground truth + the measurement runner
-│   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
-│   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
-├── dashboard/                 # React/Vite — NOT BUILT
-│   └── src/
-│       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
-│       ├── lib/               # API client, verdict token mapping
-│       └── types.ts           # Mirrors backend/app/schemas.py
-├── .github/workflows/
-│   └── trustgate.yml          # The gate — BUILT, NEVER RUN: Actions API says 0 runs (K20)
-├── render.yaml · Procfile · vercel.json   # Deploy config, written, never deployed
-└── README.md
+├── Procfile                    #   same start command, for any Procfile host
+├── vercel.json                 # Vercel SPA config — inert, no frontend
+└── trustgate/                  #   everything else lives here
+    ├── AGENTS.md              # Pointer to docs/AGENTS.md, so root-loading tools find the rules
+    ├── docs/                     # Governance — all of it, one directory
+    │   ├── AI_CONTEXT.md           # This file — constitution
+    │   ├── PROJECT_ROADMAP.md      # Phases, one ACTIVE at a time
+    │   ├── SYSTEM_LEDGER.md        # Memory — state, file history, next actions
+    │   ├── AGENTS.md               # Portable agent rules (all tools)
+    │   ├── WEDGE.md                # Positioning, demo script, falsifiable claims
+    │   └── CONTRACT.md             # The HTTP surface the engine writes
+    ├── .bob/rules/            # Bob-native rules (IBM Bob IDE only)
+    │   ├── 00-authenticity.md
+    │   ├── 01-planning-governance.md
+    │   ├── 02-session-continuity.md
+    │   └── 03-scope-control.md
+    ├── screenshots/           # Demo images — empty
+    ├── backend/                    # Python/FastAPI verdict engine — BUILT
+    │   ├── app/
+    │   │   ├── main.py            # CLI entry point; build_app() is the lazy FastAPI factory
+    │   │   ├── checkers/          # One module per checker. See roster below.
+    │   │   │   ├── base.py        # Checker protocol, timeout, asyncio.gather fan-out
+    │   │   │   ├── semantic.py    # The shared Tier 2 LLM checker
+    │   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT, never run
+    │   │   │   ├── authz.py       # Tier 2 — LLM
+    │   │   │   ├── injection.py   # Tier 2 — LLM
+    │   │   │   ├── business.py    # Tier 2 — LLM
+    │   │   │   ├── deps.py        # Tier 1 — OSV-Scanner — NOT BUILT (blocked, ledger K13)
+    │   │   │   └── CONTRIBUTING.md # The contract every checker author implements
+    │   │   ├── adjudicator.py     # Deterministic verdict. No LLM in this path.
+    │   │   ├── llm/               # Groq client (strict mode), FINDING_SCHEMA
+    │   │   ├── runlog.py          # runs/*.json — write records, recompute a verdict from disk
+    │   │   ├── comment.py         # VerdictRecord → PR comment. Local, NOT wired into the gate
+    │   │   ├── config.py          # Settings, env-overridable
+    │   │   ├── sarif.py           # Finding → SARIF 2.1.0 — BUILT, never uploaded
+    │   │   ├── store.py           # SQLite verdict log — NOT BUILT; runlog.py is what exists
+    │   │   └── schemas.py         # Pydantic request/response contracts
+    │   ├── integration_test.py    # 4-check smoke test: health, run records, verdict, gate
+    │   ├── tests/                 # 81 passing across 8 files
+    │   ├── requirements.txt       # Pinned installed set
+    │   └── pyproject.toml         — NOT BUILT
+    ├── demo_target/           # Labelled corpus — BUILT, never run against a live checker
+    │   ├── base/                  # The clean app every fixture is a one-defect copy of
+    │   └── issue-NN-*/            # One planted defect each; 3 have no checker, 2 are disputed
+    ├── bench/                 # Ground truth + the measurement runner
+    │   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
+    │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
+    ├── dashboard/             # React/Vite — NOT BUILT
+    │   └── src/
+    │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
+    │       ├── lib/               # API client, verdict token mapping
+    │       └── types.ts           # Mirrors backend/app/schemas.py
+    └── README.md
 ```
 
 `routes/` was planned and never built as a package. `build_app()` in `main.py` carries the three

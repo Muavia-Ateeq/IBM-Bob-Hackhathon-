@@ -3,6 +3,10 @@ services:
     name: trustgate-api
     runtime: python
     plan: free
+    # Render runs buildCommand and startCommand with cwd = rootDir, so the paths below stay
+    # relative to trustgate/ and the commands are unchanged by the folder restructure.
+    # Exactly one level of nesting: rootDir is trustgate/, the command then cds into backend/.
+    rootDir: trustgate
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health

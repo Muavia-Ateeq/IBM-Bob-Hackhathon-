@@ -129,8 +129,8 @@ rejected-alternatives note below.
 | 26 | `backend/app/checkers/CONTRIBUTING.md` | The "same interface for every checker owner" deliverable, as a contract document rather than five copies of a stub template. The interface already existed in `base.py`; what was missing was the evidence rules and the register-your-checker procedure |
 | 27 | `backend/tests/test_runs.py` | 9 tests. The load-bearing one is `test_no_runs_never_passes`. **This file caught a real bug**: `adjudicate([])` returns an empty degraded list (no checkers existed to be incomplete), which mapped to `degraded: false` beside a `REVIEW` verdict — a dashboard would have rendered a clean badge next to "no checkers ran". Fixed in `runlog.py`, not in the adjudicator, because the adjudicator's third return value means "names of checkers that did not complete" and that list is correctly empty |
 | 28 | `backend/requirements.txt` | `pip freeze` output. Closes the lockfile half of K9 and unblocks `render.yaml`, which cannot build without it. Includes dev tools (`pytest`, `colorama`) — one file rather than a split runtime/dev pair, for a 48h build |
-| 29 | `render.yaml` | Render service. `rootDir: engine` because `app.main` is only importable from inside `backend/` (no `__init__.py` — K9). Uses `--factory` with `app.main:build_app` so no module-level `app` is needed and the `--diff` CLI path keeps its lazy FastAPI import |
-| 30 | `Procfile` | The same command, for any host that reads a Procfile. Not a backup for Render — `render.yaml` already carries `startCommand` |
+| 29 | `render.yaml` | Render service. **Corrected 2026-09-26: this row previously said `rootDir: engine`, which the committed file had already stopped carrying** — see the decision recorded under *Modified* below. Uses a module-level `app` (a later one-line fix) so `uvicorn app.main:app` resolves. **Restructured 2026-09-26: `rootDir: trustgate`**, which leaves `buildCommand`, `startCommand` and `PYTHONPATH` byte-identical |
+| 30 | `Procfile` | The same command, for any host that reads a Procfile. Not a backup for Render — `render.yaml` already carries `startCommand`. Restructured 2026-09-26 to `cd trustgate/backend`, since this file sits at the repo root and gets no `rootDir` treatment |
 | 31 | `vercel.json` | SPA build config. **Inert** — no frontend exists. Written because it was asked for and costs nothing, not because a deploy is planned |
 | 32 | `backend/tests/test_secrets.py` | 6 tests over the gitleaks report parser, using an entry shaped exactly as `report/finding.go` emits. **This file caught two real defects** — see the correction below. Testing a private `_to_finding` is normally a smell; here it is the only way to exercise the parser without the binary, and the parser is where the credential-handling risk lives |
 
@@ -153,6 +153,49 @@ rejected-alternatives note below.
 | `AI_CONTEXT.md` | `sarif.py` and `trustgate.yml` marked built-and-never-run rather than NOT BUILT; the gate section gained an explicit state line; the Gitleaks row no longer claims `gitleaks-action@v3`, which the workflow does not use |
 | `AGENTS.md` §7 | Rewritten with the precise dead-version data, the `pull_request_target` RCE warning, the working OASIS schema URL, and the fact that GitHub's layer requires more than OASIS |
 | `.gitignore` | `/backend/.tools/` — a pinned scanner binary fetched and checksum-verified locally, never committed |
+
+### Restructured — 2026-09-26, project files under `trustgate/`
+
+The checkout directory is named `IBM BOB Hackathon` and the root mixed source with deploy config.
+`.bob/`, `backend/`, `bench/`, `demo_target/`, `docs/`, `screenshots/` and `README.md` moved
+into `trustgate/`. **Six files did not, and could not** — they are read *by path from the repo
+root*, so moving them removes the thing they configure rather than relocating it:
+
+| Stayed at the root | Because |
+|---|---|
+| `.github/` | GitHub reads workflows only from `<repo root>/.github/workflows/`. One level down, the gate stops existing — no error, no run, no SARIF upload, PRs merge unblocked |
+| `render.yaml` | Render reads the blueprint from the repo root ([spec](https://render.com/docs/blueprint-spec)) |
+| `vercel.json` | Vercel reads project config from the project root |
+| `Procfile`, `.gitignore` | Convention, not a hard platform constraint — but both need editing anyway |
+| `AGENTS.md` | Its stated purpose is *"so agent tools which load `AGENTS.md` from the repository root still find the rules"*. Moving it defeats the file |
+
+| File | Change |
+|------|--------|
+| `render.yaml` | `rootDir: trustgate` added — **one line**, and it is what makes the other three lines unnecessary. Render runs both commands with cwd = `rootDir`, so `pip install -r backend/requirements.txt` and `cd backend` resolve to `trustgate/backend/` unchanged. This is *not* the `rootDir: engine` mistake recorded below: that paired a `rootDir` with a `cd` into the **same** directory. `rootDir: trustgate` + `cd backend` is one level of nesting. `PYTHONPATH` stays `backend` — no dashboard edit needed |
+| `trustgate.yml` | `cd backend` → `cd trustgate/backend`, the requirements path gains the `trustgate/` prefix, and the four `../` artifact paths become `../../` because the engine now sits two levels below the repo root where the later steps read `verdict.txt` and `trustgate.sarif`. `GITLEAKS_CONFIG` is absolute and unchanged; the allowlist patterns needed no edit (3a) |
+| `backend/integration_test.py` | `REPO_ROOT` → `parents[2]`. It exists solely to find `.github/workflows/trustgate.yml`, which is at the **repo** root, not under `trustgate/` |
+| `backend/tests/test_integration.py` | `REAL_WORKFLOW` → `parents[3]`, same reason. The `sys.path` insert on line 6 needed no change — it resolves to `backend/`, which did not move relative to `tests/` |
+| `.gitignore` | The four anchored rules re-anchored to `/trustgate/…`. Two of them protect real files on disk — `backend/runs/` (20+ run records, each carrying verbatim evidence) and `backend/.tools/` (a 22 MB `gitleaks.exe`) — so a stale anchor would have committed a credential fragment and a binary, or lost the binary |
+| `AGENTS.md` | Pointer retargeted to `trustgate/docs/AGENTS.md` |
+| `AI_CONTEXT.md`, `demo_target/README.md` | Directory diagram shows the new two-level shape; one `../.github/gitleaks.toml` link needed a second `../` |
+
+`bench/run_benchmark.py` and `backend/app/main.py` needed **no** edit, and that was verified
+rather than assumed — see the verification row below.
+
+**Verified after the move, on the real tree:** 81 tests pass (the 74 in the ledger below is
+stale — more landed since); `REPO_ROOT` resolves to the repo root and `trustgate.yml` exists
+at the computed path; `--dry-run` prints the 4-checker roster; a real run on
+`samples/example.diff` writes 4 run records and returns `REVIEW` with 4 degraded checkers, which
+is K12/K14's known state rather than anything the move caused; `bench/run_benchmark.py --dry-run`
+resolves all 10 corpus cases; and `uvicorn app.main:app` booted **from `trustgate/backend`** —
+the exact cwd `rootDir: trustgate` produces — answered `/api/health` `{"ok":true}` and
+`/api/runs` `{"count":23}`.
+
+**Not verified:** that the edited `trustgate.yml` runs green on GitHub. It triggers on
+`pull_request` and `workflow_dispatch` only, so a direct push to `main` does not execute it, and
+K20 records 0 runs to date. `UNVERIFIED — workflow_dispatch it by hand, or open a throwaway PR`.
+The four `../` → `../../` edits are the risk: the test suite proves the file parses and its
+invariants hold, but nothing local proves the artifacts land where the later steps read them.
 
 ### Two defects the tests caught, recorded because the reasoning was wrong first
 
@@ -326,7 +369,7 @@ whose per-file granularity allows a mode-specific override later.
 | K11 | **`.gitignore` used unanchored `data/` and `build/`.** An unanchored pattern with a trailing slash matches at *any* depth, so `data/` was silently excluding `backend/app/data/` and `dashboard/src/data/` — a findings store would have vanished with no error and no warning | Medium | **Fixed 2026-09-25.** Both anchored to the root (`/data/`, `/build/`) with the reason written into the file. Verified with `git check-ignore -v backend/app/data/findings.json` — no match, i.e. tracked — while `git check-ignore -v data/x` still matches. Worth knowing: `git check-ignore` is the check, not reading the file, because the failure mode is a *silence* |
 | K12 | **No `GROQ_API_KEY` in this environment and no `.env`.** The inference path has therefore never executed against a live model. The `BLOCK` verdict is implemented and unit-tested through a static provider, but **no real model call has happened** — so no latency, no cost-per-PR, and no per-checker precision exist and none are claimed | **High** | **Status changed 2026-09-26: provisioned, still never exercised.** A `GROQ_API_KEY` is now set in the Render dashboard for `trustgate-api`, and `load_settings()` reads `GROQ_API_KEY` from the environment, so a run on that service *would* reach Groq. **No such run has been made**, so this stays open — the blocker moved from *obtaining a key* to *making a run through the deployed service*. A key existing is not a key having been used. Locally there is still no key and no `.env`. Blocks M4 ("first real verdict"), all of Phase 4's numbers, and the `BLOCK` branch of the demo. `UNVERIFIED — one run through https://trustgate-api-ehib.onrender.com with the key set, or one local run with GROQ_API_KEY exported` |
 | K13 | **`deps.py` (OSV-Scanner) is blocked, not merely unbuilt.** OSV-Scanner's JSON gives `id`, `package.{name,version,ecosystem}`, and `source.path` — but **no line number**. `Finding.line` is `Field(ge=1)`, so a package-level CVE has no truthful value for it. Two ways out, both team decisions: (a) allow `line: 0` to mean "package-level, not line-level", which changes a stated success metric — `PROJECT_ROADMAP.md:171` requires 100% of findings to have file + line + quote — and would require rewriting the `line < 1` test; (b) search the manifest for the package name to synthesise a line, which is a heuristic whose accuracy cannot be measured without a corpus | Medium | **Open, deliberately.** Not started rather than shipped wrong. A CVE finding pointing at the wrong line is exactly the "hallucination with a severity label" the constitution forbids, and option (a) weakens a metric the project is scored on. `UNVERIFIED — nothing; the blocker is a schema decision, not a missing fact` |
-| K14 | **`secrets.py` has never executed.** The checker has only been exercised through its failure path — where it correctly degrades to `REVIEW` with a named error, which is the behaviour that matters most and is the one thing testable without the binary. Its JSON field names were read from `gitleaks/gitleaks` `report/finding.go` rather than guessed, but no real report has been parsed | **High** | **Partly closed 2026-09-26; still open.** Gitleaks **v8.30.1** `gitleaks_8.30.1_windows_x64.zip` was downloaded to `backend/.tools/` and its SHA-256 verified against the release's own `gitleaks_8.30.1_checksums.txt`: `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`. **It has never been executed** — the run was denied, correctly, as executing a third-party binary the user had not authorised. The binary is present, checksum-verified, and gitignored. `UNVERIFIED — ./backend/.tools/gitleaks.exe version, then one run of python app/main.py --diff <diff containing a planted credential> with GITLEAKS_BIN pointed at it`. The same blocker class as K12: a missing authorisation, not missing code |
+| K14 | **`secrets.py` has never executed.** The checker has only been exercised through its failure path — where it correctly degrades to `REVIEW` with a named error, which is the behaviour that matters most and is the one thing testable without the binary. Its JSON field names were read from `gitleaks/gitleaks` `report/finding.go` rather than guessed, but no real report has been parsed | **High** | **Partly closed 2026-09-26; still open.** Gitleaks **v8.30.1** `gitleaks_8.30.1_windows_x64.zip` was downloaded to `backend/.tools/` and its SHA-256 verified against the release's own `gitleaks_8.30.1_checksums.txt`: `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`. **The binary was executed on 2026-09-26, later in the same day** — authorised by the user, which is what the earlier denial was waiting on. `./backend/.tools/gitleaks.exe version` → `8.30.1`, matching the workflow's pin. A full working-tree scan returned **3** findings, all `generic-api-key`: `backend/tests/test_secrets.py:18` (entropy 3.66), `demo_target/issue-02-hardcoded-key/config.py:5` (entropy 4.00), and a local `__pycache__/*.pyc` build artifact. The second **matches `cases.json` ground truth exactly** — the same file and line the corpus predicts — so the `UNVERIFIED` caveat recorded in that file is now satisfied. The `.gitleaksignore`-holds-fingerprints claim was re-confirmed against the vendor README, and the contradicting "a `.gitleaks.toml` allowlist would disable the gate" claim was **disproved** by experiment. **Still open:** the checker has still not been driven end-to-end through `python app/main.py` with `GITLEAKS_BIN` pointed at it, so a parsed real report through `checkers/secrets.py` is still untested. `UNVERIFIED — one run of python app/main.py --diff samples/example.diff with GITLEAKS_BIN=./backend/.tools/gitleaks.exe`. The same blocker class as K12: a missing authorisation, not missing code |
 | K15 | **A silent-truncation fail-open in `checkers/semantic.py`, live until 2026-09-26.** `body = diff[: self._max_diff_bytes]` dropped everything past 120,000 characters **with nothing in the prompt saying so**. The model obeyed `EVIDENCE_CONTRACT`'s "return an empty findings array" and returned no findings, three checkers reported `status=OK`, and the adjudicator returned **`PASS`** — having reviewed 27% of the diff. Reproduced before the fix: a 450,075-character diff with a planted credential past the cut produced `all checkers completed with no findings`. A large PR was reviewed *less* thoroughly than a small one, invisibly. It was masked only because `secrets` errors without gitleaks (K14), forcing `REVIEW` for an unrelated reason — **installing gitleaks would have made it live** | **Critical** | **Fixed 2026-09-26.** `SemanticChecker.run` now refuses a diff over budget and names `TRUSTGATE_MAX_DIFF_BYTES`; `base.execute` converts the raise to `CheckerResult(ERROR)` and the existing, already-tested fail-closed path yields `REVIEW`. Same input, re-run: `status=error` → `REVIEW`, degraded `['authz']`. Deliberately **refuses rather than chunks** — chunking with the evidence check re-run per chunk is the upgrade if real PRs exceed the budget. `ponytail:` comment in the source names that ceiling. 11 tests in `test_semantic.py` |
 | K16 | **Evidence was never checked against the diff.** `EVIDENCE_CONTRACT` *asked* the model for a verbatim quote; nothing verified one. `Finding` enforces only `evidence: NonEmpty`. A model returning `evidence="potential SQL injection here"` passed every gate in the codebase and, at `critical`, reached `adjudicator.py:32` and **`BLOCK`**. Wedge claim 2 was enforced by asking nicely | **Critical** | **Fixed 2026-09-26.** `_quote_present` requires the quote to occur in the body the model was shown; `_to_finding` takes `body` and raises otherwise. A failure discards the **whole batch**, deliberately — the same model produced every quote in it, so the ones that happen to match carry no more assurance than the one that does not. `\r` is stripped from the diff first, so a Windows checkout and LF evidence compare equal. Tested for accept, reject, CRLF, and non-reachability of a fabricated `critical` |
 | K17 | **Five `Settings` fields and `VerdictRecord.cost_usd` are pure scaffolding.** `run_budget_s`, `osv_scanner_bin`, `database_path`, `price_per_1k_input_usd`, `price_per_1k_output_usd` are read by nothing. `cost_usd` has exactly one assignment, `runlog.py` → `None`. The token counts that would feed it **are** gathered in `llm/client.py:84-87` and discarded in `semantic.py:40`, which takes only `.payload` | Medium | **Open, recorded.** Cost tracking is not partially implemented; it is not implemented. `AI_CONTEXT.md` now says so. No cost number may be published. `UNVERIFIED — a run with a live key and a `Completion` that reaches `VerdictRecord` |
@@ -432,6 +475,8 @@ harness, and a runner that refuses to fake the number.
 | 43 | `bench/cases.json` | Ground truth, `extra="forbid"` and Pydantic-validated at load. `expected_checker` is **`null` for three cases** and `disputed: true` for two. The assignments were made by reading each checker's `FOCUS` string, not by matching case names — which is how `issue-01` (typosquat, no checker: `deps` is unbuilt) and `issue-07` (licensing, never designed) came out with no owner. Those rows are the corpus half of wedge claim 1 |
 | 44 | `bench/run_benchmark.py` | Generates each diff with `difflib`, invokes the **shipped CLI** exactly as the gate does, reads the verdict back with the same `compute_verdict` call `main.py:18` makes. No analysis path of its own. Enforces one rule at three levels: an incomplete checker gets no rate, a **degraded case is not scored at all**, and the run ends `INCOMPLETE` rather than `PASS` |
 | 45 | `bench/README.md`, `demo_target/README.md` | The `PYTHONIOENCODING` engine bug below, and the self-reference problem the corpus creates for the gate |
+| 46 | `.github/gitleaks.toml` | A two-path allowlist that stops the gate blocking every PR on our own planted fixtures. `[extend] useDefault = true` keeps gitleaks' full default ruleset active — without it the file would carry no `[[rules]]` and the secrets gate would silently detect nothing, which is the failure mode this repo treats as worse than a false positive. Both patterns are anchored `^…$` and use `'''` literal strings, because `\.` inside a TOML `"""` string is an invalid escape and gitleaks refuses to start. **Placed in `.github/`, not the repo root, and that placement is load-bearing** — see decision 3a |
+| 3a | *Decision — gate-only scoping* | `--config`'s precedence list ends in `(target path)/.gitleaks.toml`, and the target path is `--workspace`, which is `trustgate/` for the gate **and** for `bench/run_benchmark.py`. A config inside that directory would therefore be auto-discovered by the benchmark too, and would silence `demo_target/issue-02-hardcoded-key` — recorded in `cases.json` as `expected_checker: secrets`, `expected_line: 5`, `disputed: false`, i.e. the corpus's **one** deterministic-detection case. Suppressing the gate's false positive that way would turn a true positive into a guaranteed false negative and corrupt the headline false-positive rate. So the config sits outside the scan target path and only `trustgate.yml` opts in, via `GITLEAKS_CONFIG`. Verified both directions on the real tree: with the env var the two fixtures are suppressed, without it all three findings return. **2026-09-26 restructure: the target path stopped being the repo root and became `trustgate/`, which puts `.github/gitleaks.toml` *further* outside it. The decision holds and gets stronger, and the two allowlist patterns need no edit — they are relative to the scan target, so `^demo_target/…` still matches from inside `trustgate/`** |
 
 #### Four things found while building it
 
@@ -452,15 +497,22 @@ harness, and a runner that refuses to fake the number.
    verdict. It now scans stderr for `Traceback` first. Caught only because the
    first real run produced *no run records at all* and the empty result looked
    like a clean miss.
-3. **`.gitleaksignore` cannot suppress the corpus's own secret.** The vendor
-   README is explicit that it holds finding **fingerprints**, not paths — so the
-   path-based ignore this session set out to write would have been silently
-   inert, which is the exact failure mode Rule 00 exists to prevent. The
-   alternative, a root `.gitleaks.toml` carrying only an `[[allowlists]]` block,
-   is **worse than the problem**: gitleaks' config is replacement, not merge, so
-   a config with no `[[rules]]` detects nothing at all and the secrets gate
-   becomes a silent no-op. Neither was added. The conflict is documented in
-   `demo_target/README.md` with the two real fixes as a team decision.
+3. **`.gitleaksignore` cannot suppress the corpus's own secret — but a
+   `.gitleaks.toml` can, if it carries `[extend] useDefault`.** The vendor README
+   is explicit that `.gitleaksignore` holds finding **fingerprints**, not paths,
+   so a path line would have been silently inert — the exact failure mode Rule 00
+   exists to prevent. That half of the finding stands and was re-verified this
+   session. The other half — that a config carrying only an `[[allowlists]]`
+   block "would disable the gate" — **was wrong, and executing the binary is what
+   proved it.** gitleaks' config is replacement rather than merge *only* when the
+   replacement carries no rules of its own; `[extend] useDefault = true` keeps the
+   entire default ruleset live while appending an allowlist. Verified against
+   v8.30.1: `useDefault` alone still reports the finding; an allowlist naming the
+   file suppresses it; an allowlist naming a *different* file does not. A third
+   option existed that this entry never considered — vendoring the whole default
+   config — and it is now unnecessary, because `useDefault` gets the same result
+   without pinning the ruleset against gitleaks upgrades. `.github/gitleaks.toml`
+   now exists. See decision 3a for why it is scoped to the gate.
 4. **`issue-05-unsafe-deserialize` is not planted.** A reachable
    `pickle.loads` on client-controlled bytes was **declined by the sandbox
    classifier as an RCE surface** and was not worked around. `cases.json` marks

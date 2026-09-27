@@ -28,6 +28,9 @@ def _env_float(name: str, default: float) -> float:
 class Settings:
     groq_api_key: str | None
     model_id: str
+    watsonx_api_key: str | None
+    watsonx_url: str
+    watsonx_model_id: str
     checker_timeout_s: int
     run_budget_s: int
     max_diff_bytes: int
@@ -40,9 +43,13 @@ class Settings:
 
 def load_settings() -> Settings:
     key = os.environ.get("GROQ_API_KEY")
+    wx = os.environ.get("WATSONX_API_KEY")
     return Settings(
         groq_api_key=key if key and key.strip() else None,
         model_id=os.environ.get("TRUSTGATE_MODEL", "openai/gpt-oss-120b"),
+        watsonx_api_key=wx if wx and wx.strip() else None,
+        watsonx_url=os.environ.get("WATSONX_URL", "https://us-south.ml.cloud.ibm.com"),
+        watsonx_model_id=os.environ.get("WATSONX_MODEL", "ibm/granite-4-h-small"),
         checker_timeout_s=_env_int("TRUSTGATE_CHECKER_TIMEOUT_S", 30),
         run_budget_s=_env_int("TRUSTGATE_RUN_BUDGET_S", 90),
         max_diff_bytes=_env_int("TRUSTGATE_MAX_DIFF_BYTES", 120_000),

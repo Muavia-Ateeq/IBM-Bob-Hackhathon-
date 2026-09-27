@@ -1,0 +1,33 @@
+# Gitleaks config for the CI gate ONLY. It is not at the scan target path
+# (the repo root) on purpose: gitleaks auto-discovers "(target path)/.gitleaks.toml",
+# and a root config would also silence bench/run_benchmark.py -- which must keep
+# detecting demo_target/issue-02-hardcoded-key, the corpus's one deterministic case
+# (bench/cases.json, expected_checker: secrets, expected_line: 5).
+# The gate opts in explicitly via GITLEAKS_CONFIG in .github/workflows/trustgate.yml.
+#
+# useDefault keeps gitleaks' full default ruleset active. Without it this file would
+# carry no [[rules]] and the secrets gate would silently detect nothing.
+# VERIFIED against backend/.tools/gitleaks.exe v8.30.1: with useDefault and no
+# allowlist the finding is still reported; with a non-matching allowlist path it is
+# still reported. This allowlist suppresses these two paths and nothing else.
+#
+# The paths use ''' literal strings, not """. In a TOML basic string a backslash-dot
+# is an invalid escape and gitleaks refuses to start with
+# "invalid escaped character U+002E '.'" -- which fails closed, but takes the gate
+# down with it.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "TrustGate's own deliberately-planted fake secrets"
+paths = [
+  # bench/cases.json case issue-02-hardcoded-key, expected_checker: secrets,
+  # expected_line: 5, disputed: false. A real-looking session key, planted so the
+  # deterministic checker has something to find. Suppressed for the gate only.
+  '''^demo_target/issue-02-hardcoded-key/config\.py$''',
+  # A synthetic gitleaks report entry. The fake key is the input to
+  # test_the_secret_itself_never_reaches_the_finding, which is the regression test
+  # proving the engine cannot leak a credential.
+  '''^backend/tests/test_secrets\.py$''',
+]
