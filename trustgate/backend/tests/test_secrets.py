@@ -15,7 +15,7 @@ ENTRY = {
     "StartColumn": 12,
     "EndColumn": 40,
     "Match": "api_key = \"sk-live-abc123\"",
-    "Secret": "sk-live-abc123",
+    "Secret": "DUMMY_SECRET_REMOVED",
     "File": "config/settings.py",
     "SymlinkFile": "",
     "Commit": "0" * 40,
