@@ -22,8 +22,10 @@ from app.llm.client import Provider, UnavailableProvider, build_provider
 from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, write_run_records
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
+from checkers.security_reviewer import checker as security_reviewer
+from checkers.spec_conformance import checker as spec_conformance
 
-CHECKER_MODULES = (secrets, authz, injection, business)
+CHECKER_MODULES = (secrets, authz, injection, business, security_reviewer, spec_conformance)
 
 
 def _log(message: str) -> None:
