@@ -65,10 +65,19 @@ needs judgement, and never let the second kind silently stand in for the first.*
 ## The ninety-second demo
 
 **This is the demo that runs today.** It is a terminal, not a pull request. The GitHub gate
-**is** written — `.github/workflows/trustgate.yml`, SHA-pinned, with a tested adjudicator
-behind it — but it has never executed on a runner, and every run that reaches a reviewer
-without `GROQ_API_KEY` degrades to `REVIEW`. See `README.md` → *Not built* for exactly what
-has and has not run.
+**has** executed on a runner — twice, both `failure`, because it correctly `BLOCK`ed
+TrustGate's own planted fixtures through a gitleaks allowlist whose `^`-anchored patterns
+could not match the `../`-prefixed paths the scanner reports; that fix is landed as
+`a04438b` and needs one fresh pull request to demonstrate green (K20). A local `BLOCK` needs
+no pull request and no key:
+
+```
+GITLEAKS_BIN=backend/.tools/gitleaks.exe python bench/run_benchmark.py
+# -> issue-02-hardcoded-key  BLOCK  secrets  tp  precision 1.00  recall 1.00
+```
+
+Every run that reaches a reviewer without `GROQ_API_KEY` still degrades to `REVIEW` for the
+other three checkers. See `README.md` → *Not built* for exactly what has and has not run.
 
 1. `python app/main.py --diff samples/example.diff` with `GROQ_API_KEY` set. Wall-clock appears.
 2. Findings print, each with its file, line, and quoted source line.

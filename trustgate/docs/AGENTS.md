@@ -98,8 +98,15 @@ A session that ends without a ledger update is a session whose knowledge is lost
 - Work only inside the 🔴 ACTIVE phase in `PROJECT_ROADMAP.md`.
 - If asked for out-of-scope work, say so and ask to update the roadmap first.
 - Do not move a phase boundary to absorb a slipping task. Cut scope instead.
-- Only Phase 0 is active. Application code, dependency installs, and commits are **out of
-  scope** until Phase 2 / explicit approval.
+- `backend/`, `bench/`, `dashboard/`, `demo_target/`, and `.github/workflows/` are **in
+  scope.** They are the deliverables, they exist, and they are maintained. This line was
+  rewritten 2026-09-27: it previously read *"Only Phase 0 is active — application code,
+  dependency installs, and commits are out of scope"*, which contradicted the tree it
+  governs. See K10. The phase label in `PROJECT_ROADMAP.md` is still a team decision and is
+  recorded there as open; **the scope below no longer depends on resolving it**, because
+  the answer is now "the existing code is the work".
+- `git commit` and `git push` still require explicit instruction (`§6`). Scope and
+  authorisation are separate questions.
 
 ---
 

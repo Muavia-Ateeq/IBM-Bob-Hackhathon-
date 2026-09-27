@@ -22,23 +22,46 @@ business    SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set — no rate 
 OVERALL: INCOMPLETE - 4 of 4 checkers did not complete.
 ```
 
-That is the correct output. K12 (no `GROQ_API_KEY`) and K14 (the gitleaks binary
-has never been executed) are both open, and no number in the report is estimated
-to fill the gap.
+That is the correct output, and it is what the runner produced with no
+`GITLEAKS_BIN` set. K12 (no `GROQ_API_KEY`) is open, and no number in the report
+is estimated to fill the gap.
+
+**With gitleaks on the path, one checker does report.** K14 closed on
+2026-09-26 — `GITLEAKS_BIN` pointed at the checksum-verified binary produces a
+real `BLOCK` on `issue-02-hardcoded-key`:
+
+```
+GITLEAKS_BIN="$PWD/.tools/gitleaks.exe" ./.venv/Scripts/python.exe ../bench/run_benchmark.py
+```
+
+```
+issue-02-hardcoded-key        BLOCK   secrets     tp     hardcoded credential
+  secrets    MEASURED   TP 1  FP 0  FN 0  precision 1.00  recall 1.00
+OVERALL: INCOMPLETE - 3 of 4 checkers did not complete.
+```
+
+**n=1. That is a demonstration that the harness measures, not an accuracy
+claim**, and the `INCOMPLETE` line stays because three checkers genuinely did not
+run. Do not quote a precision from a single case.
 
 **The contract the runner enforces.** Three rules, all of them the same idea
 applied at three levels:
 
 1. A checker that did not complete OK on **every** case gets no precision and no
    recall — only the reason it failed.
-2. A case whose run came back degraded is not scored at all. Scoring "no
-   findings" from a run where nothing finished as a false negative is the same
-   fail-open one level up, and worse, because it looks like a measurement.
+2. A case is not scored if the checkers that could have changed its score did not
+   finish. For a case with an `expected_checker`, that is *that* checker — three
+   unrelated LLM checkers being down says nothing about whether `secrets` found
+   the defect, so a correct finding is not thrown away (K22). A case that expects
+   **clean** is the opposite: any checker at all could have raised the false
+   positive being ruled out, so one degraded checker disqualifies it.
+   Scoring "no findings" from a run where nothing finished as a false negative is
+   the same fail-open one level up, and worse, because it looks like a measurement.
 3. The run ends `INCOMPLETE`, never `PASS`, if anything was skipped — the same
    contract `adjudicator.py` applies to a degraded run.
 
-Set `GROQ_API_KEY` and put gitleaks on `PATH` (or `GITLEAKS_BIN`) and the same
-command produces real figures. Until then it will not, by design.
+Set `GROQ_API_KEY` and the remaining three report real figures. Until then they
+will not, by design.
 
 ## How a case is run
 

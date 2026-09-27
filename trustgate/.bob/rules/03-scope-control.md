@@ -10,17 +10,39 @@ Applies to every conversation, in every mode.
 - If asked for out-of-scope work, say so and ask to update the roadmap first.
 - Changing the active phase is a **Tier 3** action: full plan, then approval.
 
-## Current status: Phase 0 only
+## Current status: the build phase — `backend/` is in scope
 
-**Phase 0 — Foundation & Governance** is the only active phase. It is governance
-documents only.
+**Rewritten 2026-09-27, on the user's explicit instruction.** This section previously read:
 
-Out of scope until Phase 2 and explicit approval:
+> **Phase 0 — Foundation & Governance** is the only active phase… Out of scope until
+> Phase 2: writing application code, installing dependencies, creating `backend/`,
+> `dashboard/`, or `.github/workflows/`, any git commit.
 
-- Writing application code
-- Installing dependencies
-- Creating `backend/`, `dashboard/`, or `.github/workflows/`
-- Any git commit
+That was false against the tree it governs. All of those directories exist, hold the
+product, and are deployed. An agent booting on this rule would either refuse to work or
+rebuild what already exists — which is exactly the failure **K8** records as having already
+happened once. The rule was not protecting the boundary; it was the breach.
+
+**Now in scope, and the ordinary work of this project:**
+
+- `trustgate/backend/` — the engine, its checkers, its tests
+- `trustgate/bench/` — the corpus and the benchmark runner
+- `trustgate/demo_target/` — the planted fixtures the corpus measures against
+- `trustgate/dashboard/` — the React dashboard
+- `.github/workflows/` — the gate
+- Dependency installs into `backend/.venv/`
+
+**Still requiring explicit approval:**
+
+- `git commit` / `git push`
+- Any deletion
+- Any new top-level dependency
+- Phase transitions (still Tier 3, still `PROJECT_ROADMAP.md`'s call, still open as K10)
+
+`PROJECT_ROADMAP.md` still marks Phase 0 🔴 ACTIVE. That label is now known to be stale
+and it is recorded as open in `SYSTEM_LEDGER.md` (K10) — **but nothing in this rule
+depends on it any more.** The scope above is the truth about the tree, and it stands
+whatever the phase is eventually renamed.
 
 ## Do not move a phase boundary
 
@@ -35,7 +57,7 @@ absorbing work nobody decided to do.
 If the request is out of scope, the honest answer names the boundary and offers the
 legitimate path:
 
-> That is Phase 3 work and Phase 0 is active. I can add it to the Phase 3 task list, or
+> That is Phase 3 work and Phase 3 is not active. I can add it to the Phase 3 task list, or
 > you can approve a phase transition now. Which?
 
 Do not quietly expand scope. Do not refuse without offering the alternative.
