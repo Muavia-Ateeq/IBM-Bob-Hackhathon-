@@ -47,6 +47,29 @@ def test_a_floating_tag_is_reported_as_unpinned(tmp_path: Path) -> None:
     assert "SHA-pinned" in detail
 
 
+def test_a_floating_tag_in_any_job_is_reported_not_just_the_gate(tmp_path: Path) -> None:
+    # The pin check used to read one named job, so a floating tag added to a second job went
+    # unseen while the check still reported success. Pin every job's steps, so the count a
+    # reviewer reads reflects the whole workflow.
+    workflow = tmp_path / "w.yml"
+    workflow.write_text(
+        "name: TrustGate\n"
+        "on:\n  pull_request:\n"
+        "permissions:\n  security-events: write\n"
+        "jobs:\n"
+        "  tests:\n    steps:\n"
+        "      - uses: actions/setup-python@v5\n"
+        "  gate:\n    steps:\n"
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2\n"
+        "        if: always()\n",
+        encoding="utf-8",
+    )
+    ok, detail = check_gate(workflow)
+    assert not ok
+    assert "3 action(s) SHA-pinned" in detail
+
+
 def test_a_missing_upload_step_is_reported(tmp_path: Path) -> None:
     workflow = tmp_path / "w.yml"
     workflow.write_text(

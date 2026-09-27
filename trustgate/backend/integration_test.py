@@ -128,7 +128,10 @@ def check_gate(workflow: Path) -> tuple[bool, str]:
 
     # Bare `on:` is parsed as the boolean True under YAML 1.1, so both keys must be tried.
     triggers = document.get("on", document.get(True)) or {}
-    steps = document["jobs"]["gate"]["steps"]
+    # Every job's steps, not just `gate`. Reading one named job meant a second job's actions
+    # were never pin-checked, so a floating tag added anywhere else in this workflow would
+    # have passed. Collect across jobs so the next one added is covered without an edit here.
+    steps = [step for job in (document.get("jobs") or {}).values() for step in (job.get("steps") or [])]
 
     pins = [str(step["uses"]) for step in steps if "uses" in step]
     unpinned = [pin for pin in pins if not SHA_PIN.match(pin.split("@", 1)[-1])]
