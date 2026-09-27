@@ -17,7 +17,7 @@
 | **Domain** | Application security — pre-merge pull request risk gating |
 | **Core Purpose** | Run security checkers in parallel against a pull request diff, merge their findings through a deterministic adjudicator, and emit one verdict — `PASS`, `REVIEW`, or `BLOCK` — with cited evidence |
 | **Version** | `__version__ = "0.1.0"` in `backend/app/config.py`, single source of truth. It is what the FastAPI app title reports *and* what `sarif.py` writes to `tool.driver.version`. Previously SARIF emitted a hardcoded `"0.0.0"` on every upload ever made — that is fixed, and a second hardcoded version string is a defect |
-| **Status** | Engine core built and tested, runnable from the CLI. All seven checkers exist; `secrets` has produced a real `BLOCK` against the planted `issue-02-hardcoded-key` fixture (n=1). The six semantic checkers have never run against a live model. The GitHub gate **has executed — twice, both `failure`** (ledger K20); the SARIF upload step ran under `if: always()`, acceptance unconfirmed. No PR comment has been posted. The dashboard is built but not deployed. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
+| **Status** | Engine core built and tested, runnable from the CLI. All seven checkers exist; `secrets` has produced a real `BLOCK` against the planted `issue-02-hardcoded-key` fixture (n=1). The six semantic checkers have never run against a live model. The GitHub gate **is green** — runs `36317034453` (PR #6) and `36311839360` both completed `success` on 2026-09-27, SARIF upload included (ledger K20, K27). No PR comment has been posted. The dashboard is built but not deployed. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
 
 ### Naming constraints (verified, not hypothetical)
 
@@ -72,13 +72,13 @@ Consequences, binding on this project:
 | SARIF 2.1.0 | Native GitHub Code Scanning format. Findings render inline on the diff |
 | `github/codeql-action/upload-sarif` | Uploads findings. Requires `security-events: write` permission |
 
-**State: built, unit-tested, and executed on GitHub — twice, both `failure` (K20).**
+**State: built, unit-tested, and executed on GitHub — green.** Runs `36317034453` (PR #6) and
+`36311839360` (PR #5) both completed `success` on 2026-09-27, SARIF upload step included.
 `tests/test_gate.py` pins the
 BLOCK-grep pattern against the CLI's own output so a format change cannot silently disable
 blocking, and `tests/test_sarif.py` validates the report against both the OASIS schema and
-GitHub's stricter required table. What is *not* verified: that Code Scanning accepts the
-upload, and that any run since the `a04438b` allowlist fix is green. UNVERIFIED — opening a
-pull request and reading the Actions tab is what verifies that.
+GitHub's stricter required table. What is *not* verified: that Code Scanning *accepted* the
+upload and rendered the alerts — the upload step succeeded, which is a different claim.
 
 ### Deterministic scanners (checker tier 1)
 

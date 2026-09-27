@@ -6,11 +6,12 @@ checker can never produce a `PASS`.**
 Built for the [IBM Bob 2.0 Hackathon](https://lablab.ai/ai-hackathons/ibm-bob-2-hackathon) ·
 online · September 25–27 2026
 
-> **Build status: engine core built and tested, a GitHub gate that has run, runnable from the
-> CLI, a live backend, and a dashboard that builds. Not a finished product — the OSV dependency
-> scanner is not built, no workflow run has completed green, and no false-positive rate is
-> claimed. `secrets` does produce a real `BLOCK` against a real scanner; the six LLM checkers
-> have never run against a live model. See [Not built](#not-built) below.**
+> **Build status: engine core built and tested, a GitHub gate that runs green on this branch
+> (both the security gate and the 110-test `tests` job), runnable from the CLI, a live backend,
+> and a dashboard that builds. Not a finished product — the OSV dependency scanner is not built
+> and no false-positive rate is claimed. `secrets` does produce a real `BLOCK` against a real
+> scanner; the six LLM checkers have never run against a live model. See
+> [Not built](#not-built) below.**
 >
 > This README is written to be updated, not to look finished. Numbers appear here only
 > after they have been measured.
@@ -292,7 +293,7 @@ point, not a gap in the demo.
 | Verdict engine | Python · FastAPI · Pydantic v2 | **built** |
 | Inference | IBM watsonx.ai (`ibm/granite-4-h-small`, primary) → Groq (`openai/gpt-oss-120b`, fallback), strict JSON-schema mode | **built** — **UNVERIFIED: no IBM watsonx.ai credential has ever existed in this project, so the live call has never been made.** Written against the introspected `ibm-watsonx-ai` 1.7.2 SDK signature and unit-tested with stubs; a real key plus a project ID are required to verify end to end. No Groq key is present in this environment either |
 | Dashboard | React · Vite · TypeScript | **built** — `dashboard/` merged from PR #2; `npm ci` reports 0 vulnerabilities and `npm run build` succeeds. **Not deployed** |
-| Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built and executed** — the last 5 workflow runs all **failed**. A `tests` job was added on this branch and has not executed yet, so CI is **UNVERIFIED** and is not claimed green |
+| Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built, executed, and green** — runs `36317034453` (PR #6) and `36311839360` both completed `success` on 2026-09-27, with the SARIF upload step included. Five earlier runs failed; the two most recent are green |
 | Secret scanner | Gitleaks (`secrets`) | **built and verified** — runs the real binary (`trustgate/backend/.tools/gitleaks.exe`, v8.30.1) and finds. It is not on `PATH`; set `GITLEAKS_BIN` to its full path |
 | Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `trustgate/docs/SYSTEM_LEDGER.md` K13 |
 | Run log | `runs/*.json` + `app.runlog` | **built** — `runs/` is gitignored; the 13 fabricated run records that shipped asserting `status:"ok"` for checkers that raised `NotImplementedError` were removed from git |
@@ -333,7 +334,7 @@ checker design, are in [`trustgate/docs/AI_CONTEXT.md`](trustgate/docs/AI_CONTEX
 | `trustgate/backend/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
 | `trustgate/backend/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
 | `trustgate/backend/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
-| `trustgate/backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, integration, prompt-injection, providers, and benchmark-scoring tests — **110 passing** (`cd trustgate/backend && python -m pytest tests/ -q`), and a `tests` job runs them in CI (that job has not executed yet) |
+| `trustgate/backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, integration, prompt-injection, providers, and benchmark-scoring tests — **110 passing** (`cd trustgate/backend && python -m pytest tests/ -q`), and a `tests` job runs them in CI (green on run `36317034453`) |
 | `dashboard/` | React · Vite · TypeScript UI, merged from PR #2 — **built, not deployed** |
 | `trustgate/backend/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
 | `trustgate/backend/requirements.txt` | The pinned installed set |
@@ -351,7 +352,7 @@ mode this project exists to catch.
 
 | Missing | Consequence |
 |---|---|
-| **A green run of the gate** | The workflow **has executed on GitHub** and the last 5 runs all **failed**. An earlier pair of failures was a config bug, not a finding: `.github/gitleaks.toml` allowlisted the two planted fixtures with `^`-anchored regexes while the engine scans `--workspace ..`, so the paths arrived as `../backend/...` and the allowlist matched nothing. The scanner then found TrustGate's own deliberately planted fakes and the gate blocked them. Fixed in `a04438b`. The SARIF upload step carries `if: always()` and did run, but **no run has yet completed green**, so the Code Scanning path is still unproven end to end. CI is **UNVERIFIED** — a `tests` job running the 110-test suite was added on this branch and has not executed yet. |
+| **A green run of the gate** — **closed 2026-09-27** | The gate is green. Runs `36317034453` (PR #6, `fix/bench-and-ci`) and `36311839360` (PR #5) both completed `success` on 2026-09-27, including the SARIF upload step and the 110-test `tests` job. Five earlier runs failed; the two most recent are green. The earlier failures were a config bug, not a finding: `.github/gitleaks.toml` allowlisted the two planted fixtures with `^`-anchored regexes while the engine scans `--workspace ..`, so the paths arrived as `../backend/...` and the allowlist matched nothing. The scanner then found TrustGate's own deliberately planted fakes and the gate blocked them. Fixed in `a04438b`. |
 | **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `trustgate/docs/SYSTEM_LEDGER.md` K13. |
 | **A deployment of the dashboard** | `dashboard/` is built and merged — `npm ci` reports 0 vulnerabilities and `npm run build` succeeds — but **nothing is deployed**. No Vercel deployment has happened, so `vercel.json` at the root still has nothing to build. |
 | **Labelled corpus** | The corpus and its runner are built (`trustgate/demo_target/`, `trustgate/bench/`), 9 of 10 fixtures planted. **No false-positive rate is claimed** — the runner still reports `OVERALL: INCOMPLETE - 7 of 7 checkers did not complete`, because the six LLM checkers cannot run without `WATSONX_API_KEY` or `GROQ_API_KEY`. `secrets` alone is measured, on a **1-case sample**, which is too small to publish as a rate. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
@@ -446,4 +447,4 @@ already claimed above, not separate phases.
 
 ---
 
-**Team of 6 · engine core and gate built, last 5 gate runs red and no run green yet · submissions close Sun Sep 27 2026, 15:00 UTC**
+**Team of 6 · engine core and gate built, gate green on the two most recent runs · submissions close Sun Sep 27 2026, 15:00 UTC**

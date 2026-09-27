@@ -66,10 +66,11 @@ needs judgement, and never let the second kind silently stand in for the first.*
 ## The ninety-second demo
 
 **This is the demo that runs today.** It is a terminal, not a pull request. The GitHub gate
-**has** executed on a runner — twice, both `failure`, because it correctly `BLOCK`ed
+**is green** — runs `36317034453` (PR #6) and `36311839360` (PR #5) both completed `success` on
+2026-09-27. Five earlier runs failed, including two because the gate correctly `BLOCK`ed
 TrustGate's own planted fixtures through a gitleaks allowlist whose `^`-anchored patterns
 could not match the `../`-prefixed paths the scanner reports; that fix is landed as
-`a04438b` and needs one fresh pull request to demonstrate green (K20). A local `BLOCK` needs
+`a04438b` and the two runs after it are green (K20). A local `BLOCK` needs
 no pull request and no key:
 
 ```
