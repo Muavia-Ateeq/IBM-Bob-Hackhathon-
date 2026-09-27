@@ -145,11 +145,10 @@ tab is what verifies it.
     ├── bench/                 # Ground truth + the measurement runner
     │   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
     │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
-    ├── dashboard/             # React/Vite — NOT BUILT
+    ├── dashboard/             # React/Vite — built on the `frontend` branch (PR #2), not on main
     │   └── src/
     │       ├── components/        # VerdictBanner, FindingList, CheckerGrid, EvidencePanel
-    │       ├── lib/               # API client, verdict token mapping
-    │       └── types.ts           # Mirrors backend/app/schemas.py
+    │       └── lib/api.ts         # API client + the types mirroring backend/app/schemas.py
     └── README.md
 ```
 
@@ -164,7 +163,7 @@ glob runs in Starlette's threadpool rather than blocking the event loop.
 origin, and a run record carries `Finding.evidence` verbatim — for the secrets checker, a
 fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.md`.
 
-### The checker roster — five, deliberately heterogeneous
+### The checker roster — six, deliberately heterogeneous
 
 | # | Checker | Tier | Detects | Method |
 |---|---------|------|---------|--------|
@@ -172,7 +171,8 @@ fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.
 | 2 | `deps` | 1 | Known CVEs in Python + npm dependencies | OSV-Scanner |
 | 3 | `authz` | 2 | Missing authorization, IDOR, privilege escalation, broken access control | LLM |
 | 4 | `injection` | 2 | SQL/command injection, XSS, SSRF, unsafe deserialization | LLM |
-| 5 | `business` | 2 | Business-logic flaws, race conditions, crypto misuse, validation gaps | LLM |
+| 5 | `prompt_injection` | 2 | Untrusted text concatenated into a model instruction; agent-directed repo content | LLM |
+| 6 | `business` | 2 | Business-logic flaws, race conditions, crypto misuse, validation gaps | LLM |
 
 Tiers 1 and 2 fail in different ways, and that is the point. Tier 1 is **precise and dumb** — it cannot reason about intent, so it does not try. Tier 2 is **reasoning and imprecise** — it understands that "this handler reads `user_id` from the query string and never checks ownership" is a vulnerability, but it will sometimes be wrong. The adjudicator must be built for that asymmetry.
 
