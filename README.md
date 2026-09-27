@@ -6,10 +6,11 @@ checker can never produce a `PASS`.**
 Built for the [IBM Bob 2.0 Hackathon](https://lablab.ai/ai-hackathons/ibm-bob-2-hackathon) ·
 online · September 25–27 2026
 
-> **Build status: engine core built and tested, a GitHub gate written, runnable from the CLI.
-> Not a finished product — the dashboard, the OSV dependency scanner, and a measured
-> false-positive rate are not built; the gate has never run on GitHub, and no checker has yet
-> produced a real finding against a live scanner or model. See [Not built](#not-built) below.**
+> **Build status: engine core built and tested, a GitHub gate that has run, runnable from the
+> CLI, and a live backend. Not a finished product — the dashboard is not merged, the OSV
+> dependency scanner is not built, no run has completed green, and no false-positive rate is
+> claimed. `secrets` does produce a real `BLOCK` against a real scanner; the three LLM
+> checkers have never run against a live model. See [Not built](#not-built) below.**
 >
 > This README is written to be updated, not to look finished. Numbers appear here only
 > after they have been measured.
@@ -25,10 +26,14 @@ online · September 25–27 2026
 | `/api/runs` | every run record on disk — `{"count":0,...}` on a fresh deploy, because `runs/` is gitignored |
 | `/api/pr/{pr}/verdict` | one pull request's verdict |
 
-Two honest caveats, both in `docs/SYSTEM_LEDGER.md`:
+Four honest caveats:
 
 - The API is **read-only**. It surfaces run records; it does not create verdicts. Those come
   from the engine CLI, which today runs in GitHub Actions on a pull request.
+- `/api/runs` is **unauthenticated with `allow_origins=["*"]`**, and a run record carries
+  `Finding.evidence` verbatim. The `secrets` checker redacts the matched credential before it
+  becomes evidence, but this endpoint is still an open read of internal analysis on a public
+  host. Demo-only until it is authenticated — see the note at `trustgate/backend/app/main.py`.
 - `GROQ_API_KEY` is `sync: false` in the blueprint, so it must be added by hand in the Render
   dashboard. Without it, three of the four checkers degrade to `REVIEW`.
 - The Free plan spins down after ~15 minutes idle, so the first request after a pause can take
@@ -39,7 +44,7 @@ Two honest caveats, both in `docs/SYSTEM_LEDGER.md`:
 ```bash
 git clone <repo-url>                 # replace with this repository's URL
 cd <this repository's folder>   # it is `IBM BOB Hackathon` — spaces, no hyphens
-cd backend
+cd trustgate/backend
 python -m venv .venv
 .venv\Scripts\activate                # source .venv/bin/activate on macOS or Linux
 pip install -r requirements.txt
@@ -47,8 +52,8 @@ python app/main.py --serve
 curl http://127.0.0.1:8000/api/health # {"ok":true}
 ```
 
-`backend/` has no `__init__.py` or `pyproject.toml`, so every command above runs from inside
-`backend/` — that is a known gap (`docs/SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
+`trustgate/backend/` has no `__init__.py` or `pyproject.toml`, so every command above runs from inside
+`trustgate/backend/` — that is a known gap (`trustgate/docs/SYSTEM_LEDGER.md` K9), not a preference. Then read a verdict:
 
 ```bash
 python app/main.py --diff samples/example.diff --pr 42      # run the engine
@@ -59,7 +64,7 @@ python integration_test.py --pr 42                         # four-check smoke te
 ## Run it
 
 ```bash
-cd backend
+cd trustgate/backend
 pip install -r requirements.txt          # once
 
 # with GROQ_API_KEY set — real verdicts from the semantic checkers
@@ -75,7 +80,7 @@ python app/main.py --serve               # then: curl localhost:8000/api/health
 python -m app.runlog --pr 42 --runs-dir runs
 
 # the tests
-python -m pytest tests/ -v               # 81 passing
+python -m pytest tests/ -v               # 87 passing
 ```
 
 `samples/example.diff` is a small PR carrying a SQL injection, a missing-authorization gap, and a
@@ -132,7 +137,7 @@ posted as a PR comment, which would need either the `pull_request_target` RCE ab
 GitHub App with its own installation token. Neither exists. Losing the model's opinion is an
 acceptable price.
 
-**`REVIEW` does not hard-block.** `docs/WEDGE.md` is explicit that a human decides on `REVIEW`. But
+**`REVIEW` does not hard-block.** `trustgate/docs/WEDGE.md` is explicit that a human decides on `REVIEW`. But
 it is never silent: the full report is written to the job summary. If the team decides a
 degraded run should hold a merge, that is a one-line change in the last step.
 
@@ -142,8 +147,8 @@ execution with a trust boundary attached.
 ### Why the roster is mixed
 
 > **Half realised.** Three Tier 2 LLM checkers are built and have never run against a live
-> model. One Tier 1 deterministic checker is built and has never run against a real scanner.
-> The fifth checker, `deps`, is not started. Nothing here has produced a real finding yet.
+> model. The Tier 1 deterministic checker, `secrets`, runs the real gitleaks binary and does
+> produce real findings. The fifth checker, `deps`, is not started.
 
 Two of the five checkers are meant to be deterministic scanners, not models. That is deliberate.
 
@@ -201,24 +206,57 @@ constraint, not a missing feature.
 
 ## Checkers
 
-Five are planned; four are built, and **none of the four has ever produced a real finding.**
+Five are planned; four are built, and **one of the four has produced a real finding.**
 
 | Checker | What it detects | Tier | Method | Status |
 |---------|-----------------|------|--------|--------|
-| `secrets` | Hardcoded credentials, API keys, private keys | 1 | Gitleaks, deterministic | built — has run, but only ever failed: the binary is at `backend/.tools/gitleaks.exe` and not on `PATH` (K14) |
+| `secrets` | Hardcoded credentials, API keys, private keys | 1 | Gitleaks 8.30.1, deterministic | built — **runs and finds**. It blocks the `issue-02-hardcoded-key` fixture at `config.py:5` with the match redacted. It needs `GITLEAKS_BIN` pointed at the binary; `config.py` defaults to a bare `gitleaks` on `PATH`, which is why earlier runs died `FileNotFoundError` (K14) |
 | `authz` | Missing authorization, IDOR, privilege escalation | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `injection` | SQL/command injection, XSS, SSRF, unsafe deserialization | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `business` | Business-logic flaws, race conditions, crypto misuse | 2 | `openai/gpt-oss-120b` | built — never run, no API key (K12) |
 | `deps` | Known CVEs in Python and npm dependencies | 1 | OSV-Scanner, deterministic | **not built** — blocked, see K13 |
 
-Every checker implements one interface (`backend/app/checkers/base.py`), so adding a sixth must
+Every checker implements one interface (`trustgate/backend/app/checkers/base.py`), so adding a sixth must
 not require touching the orchestrator. The contract each checker author follows is in
-[`backend/app/checkers/CONTRIBUTING.md`](backend/app/checkers/CONTRIBUTING.md).
+[`trustgate/backend/app/checkers/CONTRIBUTING.md`](trustgate/backend/app/checkers/CONTRIBUTING.md).
 
-Because no checker has run live, **every verdict a reviewer can produce today is `REVIEW`** —
-`BLOCK` and a clean `PASS` are not currently demonstrable. That is a consequence of two
-missing credentials, not a design property, and it is why K12 and K14 are the first two items
-in the ledger's Next Actions.
+### See a real `BLOCK`
+
+`secrets` is the one checker that can run without a `GROQ_API_KEY`, and it produces a real
+finding. This is the whole demo, and it takes one command:
+
+```bash
+cd trustgate/backend
+GITLEAKS_BIN="$PWD/.tools/gitleaks.exe" python ../bench/run_benchmark.py
+```
+
+```
+issue-02-hardcoded-key         BLOCK    secrets     tp       Session signing key committed
+
+per-checker
+  secrets     MEASURED   TP 1  FP 0  FN 0  precision 1.00  recall 1.00
+  authz       SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set
+  injection   SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set
+  business    SKIPPED    ProviderUnavailable: GROQ_API_KEY is not set
+
+OVERALL: INCOMPLETE - 3 of 4 checkers did not complete.
+```
+
+Read that carefully, because it is the product working rather than the product failing. One
+checker found the planted credential and blocked the change. The other three were **never
+consulted**, so the run is `INCOMPLETE` and no rate is claimed for them — the same fail-closed
+contract the adjudicator applies, one level up. The runner is not willing to print a
+false-positive rate for a checker that died before it wrote a record.
+
+`GITLEAKS_BIN` is the only reason this did not already work: `config.py` defaults to a bare
+`gitleaks` on `PATH`, and the binary is a gitignored local download (K14). **On CI it is
+installed and checksum-verified instead**, so the gate gets it for free. A 1-case sample is
+not a precision claim and is not published as one — see [Results](#results).
+
+The three LLM checkers still have never run against a live model, so a reviewer without a
+`GROQ_API_KEY` will get `REVIEW` from them on every diff. A clean `PASS` is still not
+demonstrable — a run in which any checker degraded is `REVIEW` by design, and that is the
+point, not a gap in the demo.
 
 ## Tech
 
@@ -226,13 +264,13 @@ in the ledger's Next Actions.
 |-------|--------|-------|
 | Verdict engine | Python · FastAPI · Pydantic v2 | **built** |
 | Inference | Groq (`openai/gpt-oss-120b`, strict JSON-schema mode) | **built**, unverified against a live call — no API key in this environment |
-| Dashboard | React · Vite · TypeScript | **not built** |
-| Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built**, never executed — the workflow has not been run on GitHub |
-| Secret scanner | Gitleaks (`secrets`) | **built**, unverified — the binary is present and works (`backend/.tools/gitleaks.exe`, v8.30.1) but is not on `PATH`; set `GITLEAKS_BIN` to its full path |
-| Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `docs/SYSTEM_LEDGER.md` K13 |
+| Dashboard | React · Vite · TypeScript | **not on `main`** — built and deployed on PR #2, live at <https://trustgate-dashboard.vercel.app> |
+| Gate | GitHub Actions · SARIF 2.1.0 · Code Scanning | **built and executed** — 2 runs on 2026-09-26, both red on a gitleaks allowlist bug since fixed (`a04438b`). No run has completed green yet |
+| Secret scanner | Gitleaks (`secrets`) | **built and verified** — runs the real binary (`trustgate/backend/.tools/gitleaks.exe`, v8.30.1) and finds. It is not on `PATH`; set `GITLEAKS_BIN` to its full path |
+| Dependency scanner | OSV-Scanner (`deps`) | **not built** — blocked, see `trustgate/docs/SYSTEM_LEDGER.md` K13 |
 | Run log | `runs/*.json` + `app.runlog` | **built** |
-| Deploy config | `render.yaml` · `Procfile` · `vercel.json` | **written, never deployed** |
-| Data contract | `docs/CONTRACT.md` | **built** — the schema the engine actually writes |
+| Deploy config | `render.yaml` · `Procfile` · `vercel.json` | `render.yaml` **deployed and live**; `vercel.json` written but inert — no frontend on `main` to build |
+| Data contract | `trustgate/docs/CONTRACT.md` | **built** — the schema the engine actually writes |
 
 The model ID was verified against Groq's published strict-mode supported-model list. It has
 **not** been verified against a live completion, because no `GROQ_API_KEY` is present in this
@@ -240,31 +278,31 @@ environment — so the inference layer is written to spec and exercised only thr
 deterministic `StaticProvider` used in tests.
 
 Rationale for each choice, and the model/streaming/tool-use constraints that shape the
-checker design, are in [`docs/AI_CONTEXT.md`](docs/AI_CONTEXT.md).
+checker design, are in [`trustgate/docs/AI_CONTEXT.md`](trustgate/docs/AI_CONTEXT.md).
 
 ## Repository layout
 
 | Path | Contents |
 |------|----------|
-| `docs/AI_CONTEXT.md` | The constitution — identity, architecture, rules, model strategy |
-| `docs/PROJECT_ROADMAP.md` | Phases, milestones, success metrics |
-| `docs/SYSTEM_LEDGER.md` | Session-to-session memory |
-| `docs/WEDGE.md` | The positioning, the demo, and the claims that can be falsified |
-| `docs/CONTRACT.md` | The HTTP surface the dashboard and the gate both depend on |
-| `docs/AGENTS.md` | Agent rules, read by every AI tool in the loop |
-| `AGENTS.md` | Root pointer to `docs/AGENTS.md`, so tools that load from the root still find the rules |
+| `trustgate/docs/AI_CONTEXT.md` | The constitution — identity, architecture, rules, model strategy |
+| `trustgate/docs/PROJECT_ROADMAP.md` | Phases, milestones, success metrics |
+| `trustgate/docs/SYSTEM_LEDGER.md` | Session-to-session memory |
+| `trustgate/docs/WEDGE.md` | The positioning, the demo, and the claims that can be falsified |
+| `trustgate/docs/CONTRACT.md` | The HTTP surface the dashboard and the gate both depend on |
+| `trustgate/docs/AGENTS.md` | Agent rules, read by every AI tool in the loop |
+| `AGENTS.md` | Root pointer to `trustgate/docs/AGENTS.md`, so tools that load from the root still find the rules |
 | `.bob/rules/` | The same rules, in IBM Bob's native format |
-| `backend/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
-| `backend/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
-| `backend/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
-| `backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, and integration tests — 81 passing |
-| `backend/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
-| `backend/requirements.txt` | The pinned installed set |
+| `trustgate/backend/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
+| `trustgate/backend/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
+| `trustgate/backend/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
+| `trustgate/backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, integration, and benchmark-scoring tests — 87 passing |
+| `trustgate/backend/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
+| `trustgate/backend/requirements.txt` | The pinned installed set |
 | `.github/workflows/trustgate.yml` | The gate — runs the engine on every PR, uploads SARIF, fails the run on `BLOCK` |
 | `render.yaml`, `Procfile` | Deploy config for `trustgate-api` on Render |
 | `screenshots/` | Demo images for the README — **empty** |
-| `demo_target/` | Labelled corpus, one planted defect per case — **built, never run against a live checker** |
-| `bench/` | Ground truth (`cases.json`) and the measurement runner — **built; reports `INCOMPLETE`** |
+| `trustgate/demo_target/` | Labelled corpus, one planted defect per case — **built, never run against a live checker** |
+| `trustgate/bench/` | Ground truth (`cases.json`) and the measurement runner — **built; reports `INCOMPLETE`** |
 
 ## Not built
 
@@ -274,40 +312,59 @@ mode this project exists to catch.
 
 | Missing | Consequence |
 |---|---|
-| **A real run of the gate** | `.github/workflows/trustgate.yml` and the SARIF converter are written and unit-tested, but the workflow has never executed on GitHub and the SARIF has never been accepted by Code Scanning. Everything about it is verified against the published schemas and action runtimes, not against a live run. |
-| **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `docs/SYSTEM_LEDGER.md` K13. |
-| **React dashboard** | Verdict and evidence are terminal output, a PR comment, and the Code Scanning tab — nothing more. `vercel.json` exists but has nothing to build. |
-| **Labelled corpus** | The corpus and its runner are built (`demo_target/`, `bench/`), 9 of 10 fixtures planted. **No false-positive rate has been measured, and none is claimed** — the runner reports `INCOMPLETE` and prints no rate while K12 and K14 are open. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
+| **A green run of the gate** | The workflow **has executed on GitHub** — twice, on 2026-09-26, both times reaching `Fail the run on BLOCK`. Both were red for a config reason, not a finding: `.github/gitleaks.toml` allowlisted the two planted fixtures with `^`-anchored regexes while the engine scans `--workspace ..`, so the paths arrived as `../backend/...` and the allowlist matched nothing. The scanner then found TrustGate's own deliberately planted fakes and the gate blocked them. Fixed in `a04438b`. The SARIF upload step carries `if: always()` and did run, but **no run has yet completed green**, so the Code Scanning path is still unproven end to end. |
+| **OSV-Scanner** (dependencies) | No CVE detection. Blocked: OSV emits no line number, and `Finding.line` requires one. See `trustgate/docs/SYSTEM_LEDGER.md` K13. |
+| **React dashboard** | Not on `main`. Built and deployed on the `frontend` branch (PR #2) and live at <https://trustgate-dashboard.vercel.app>, wired to the backend below. It is not merged, so `vercel.json` at the root still has nothing to build. |
+| **Labelled corpus** | The corpus and its runner are built (`trustgate/demo_target/`, `trustgate/bench/`), 9 of 10 fixtures planted. **No false-positive rate is claimed** — the runner still reports `INCOMPLETE` overall, because three of four checkers cannot run without a `GROQ_API_KEY`. `secrets` alone is measured, on a **1-case sample**, which is too small to publish as a rate. One case (`issue-05`) is unplanted: a reachable `pickle.loads` fixture was declined by the sandbox classifier and needs a human decision. |
 | **Determinism harness** | The same diff has not been run 20× to prove the verdict is stable. |
-| **A real scanner run** | `secrets` has run four times and produced nothing. Every run ended `FileNotFoundError` because `config.py` defaults to a bare `gitleaks` and the binary is not on `PATH`, so no secret has ever been detected by it. |
-| **A deployment** | `render.yaml`, `Procfile`, and `vercel.json` are written. Nothing has been deployed. The backend exposes three routes: `/api/health`, `/api/pr/{pr}/verdict`, and `/api/runs`. |
+| **A clean `PASS`** | `secrets` now runs against the real gitleaks binary and **does** produce a real finding — see the checkers table. A clean `PASS` is still not demonstrable, because a run in which any checker degraded is `REVIEW` by design, and no run has had all four checkers complete. |
+| **A deployment of `vercel.json`** | The backend **is** deployed — see [Live deployment](#live-deployment). `vercel.json` is the only deploy config with nothing behind it. |
 
-**The roster is 4 of 5, and none of the 4 has produced a real finding.** `authz`, `injection`,
-and `business` are LLM checkers that have never run against a live model; `secrets` is a
-Gitleaks wrapper that has never run against a real binary. Without a `GROQ_API_KEY` or a
-`gitleaks` binary, every run a reviewer can perform today degrades to `REVIEW` — **`BLOCK` and
-a clean `PASS` are not currently demonstrable**, and that is stated here rather than papered over.
+**The roster is 4 of 5, and exactly 1 of the 4 has produced a real finding.** `secrets` runs
+the real gitleaks binary and blocks a planted credential with a cited `file:line`; `authz`,
+`injection`, and `business` have never run against a live model. The three LLM checkers still
+degrade to `REVIEW` without a `GROQ_API_KEY`, and a degraded run is never a `PASS` — so a
+clean `PASS` remains undemonstrated, and that is stated here rather than papered over.
 
-What *is* built and tested (81 tests, 8 files): the deterministic adjudicator, the fail-closed
+What *is* built and tested (87 tests, 9 files): the deterministic adjudicator, the fail-closed
 contract including its two closed bypasses, the schema-level evidence guarantees, the
 quote-must-exist-in-the-diff check, a run log that round-trips a verdict through disk, a SARIF
-converter validated against both the OASIS schema and GitHub's stricter requirements, and a
-CLI that runs them.
+converter validated against both the OASIS schema and GitHub's stricter requirements, the
+benchmark's scoring rules, and a CLI that runs them.
 
 ## Results
 
-Intentionally empty until Phase 4.
+**One measured result, and it is too small to be a rate.**
+
+| Checker | Cases | TP | FP | FN | Verdict |
+|---|---|---|---|---|---|
+| `secrets` | **1** | 1 | 0 | 0 | `BLOCK` on the planted `issue-02-hardcoded-key` fixture |
+
+Reproduce it with `GITLEAKS_BIN="$PWD/.tools/gitleaks.exe" python ../bench/run_benchmark.py` from
+`trustgate/backend`. The runner is the harness; `trustgate/bench/cases.json` is the ground truth.
+
+`n = 1`. One case cannot support a precision or false-positive claim, and the runner says so —
+it reports `OVERALL: INCOMPLETE` and refuses to print a rate for the three checkers that never
+ran. A single correct detection is evidence that the pipeline works end to end, not evidence
+that the checker is accurate. The 9 other planted fixtures are all owned by the LLM checkers,
+so they cannot be scored until a `GROQ_API_KEY` exists.
+
+Two scoring bugs were found and fixed while producing this, both of which had been making the
+runner report a plausible-looking wrong figure — a `precision 0.50` for a checker that found the
+defect exactly right, and a rule that made every case unscorable whenever any checker degraded.
+Both are pinned by `tests/test_bench_scoring.py`. They are recorded here because a measurement
+harness that quietly miscounts is worse than one that reports nothing.
 
 False-positive rate, per-checker precision and recall, p50/p95 latency, and cost per PR will
 appear here once they have been measured, along with the harness that reproduces them. Any
 number here without a reproducible run behind it would be fabricated, and this project does
-not publish fabricated numbers — see Rule 00 in [`.bob/rules/`](.bob/rules/00-authenticity.md).
+not publish fabricated numbers — see Rule 00 in [`.bob/rules/`](trustgate/.bob/rules/00-authenticity.md).
 
 ## Working with TrustGate
 
 Any AI agent can pick this project up cold:
 
-> Read `docs/AI_CONTEXT.md`, `docs/PROJECT_ROADMAP.md`, and `docs/SYSTEM_LEDGER.md`. Confirm you
+> Read `trustgate/docs/AI_CONTEXT.md`, `trustgate/docs/PROJECT_ROADMAP.md`, and `trustgate/docs/SYSTEM_LEDGER.md`. Confirm you
 > understand the architecture, the strict rules, and the active phase before we begin.
 
 The project is built by six people in 48 hours, and the governance files are maintained
@@ -317,20 +374,20 @@ in under two minutes.
 ## Team
 
 Six people, 48 hours. **These rows are unfilled on purpose** — no workstream has been claimed
-yet (`docs/SYSTEM_LEDGER.md` K4), and a name written here that nobody owns would be a fabrication
+yet (`trustgate/docs/SYSTEM_LEDGER.md` K4), and a name written here that nobody owns would be a fabrication
 in the one document judges read.
 
 | # | Member | Workstream | Focus |
 |---|--------|------------|-------|
-| A | _unassigned_ | `backend/app/llm/` | Groq client, strict schema enforcement, retry, cache-by-input-hash |
-| B | _unassigned_ | `backend/app/checkers/` | The checkers and `base.py` |
-| C | _unassigned_ | `backend/app/adjudicator.py`, `schemas.py`, `tests/` | The verdict path and the proof |
+| A | _unassigned_ | `trustgate/backend/app/llm/` | Groq client, strict schema enforcement, retry, cache-by-input-hash |
+| B | _unassigned_ | `trustgate/backend/app/checkers/` | The checkers and `base.py` |
+| C | _unassigned_ | `trustgate/backend/app/adjudicator.py`, `schemas.py`, `tests/` | The verdict path and the proof |
 | D | _unassigned_ | `.github/workflows/`, `sarif.py` | The gate and the Code Scanning upload |
 | E | _unassigned_ | `dashboard/` | React/Vite UI — **not started** |
-| F | _unassigned_ | `demo_target/` + `bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12/K14** |
+| F | _unassigned_ | `trustgate/demo_target/` + `trustgate/bench/` | Labelled corpus and the measurement runner — **built; first measurement blocked on K12/K14** |
 
 Replace `_unassigned_` with real names before submitting. The workstream column is real: it is
-the Phase 3 split in `docs/PROJECT_ROADMAP.md`, and two of the six are unstarted.
+the Phase 3 split in `trustgate/docs/PROJECT_ROADMAP.md`, and two of the six are unstarted.
 
 ---
 
