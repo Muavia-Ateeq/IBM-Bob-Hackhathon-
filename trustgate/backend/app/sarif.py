@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.config import __version__
 from app.schemas import Finding, Severity, VerdictRecord
 
 SARIF_VERSION = "2.1.0"
@@ -122,7 +123,7 @@ def _result(finding: Finding) -> dict[str, Any]:
     }
 
 
-def to_sarif(record: VerdictRecord, pr: str, tool_version: str = "0.0.0") -> dict[str, Any]:
+def to_sarif(record: VerdictRecord, pr: str, tool_version: str = __version__) -> dict[str, Any]:
     findings = record.findings
     # rules[] describes what the tool can find, not what it found today, so the whole roster is
     # always emitted. It is also why the catalogue is stable run to run: a rule that appeared
@@ -148,7 +149,7 @@ def to_sarif(record: VerdictRecord, pr: str, tool_version: str = "0.0.0") -> dic
     }
 
 
-def write_sarif(record: VerdictRecord, pr: str, path: Path, tool_version: str = "0.0.0") -> Path:
+def write_sarif(record: VerdictRecord, pr: str, path: Path, tool_version: str = __version__) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(to_sarif(record, pr, tool_version), indent=2), encoding="utf-8")
     return path

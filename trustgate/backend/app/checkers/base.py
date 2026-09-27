@@ -8,10 +8,6 @@ from typing import Protocol
 from app.schemas import CheckerResult, CheckerStatus, CheckerTier, Finding
 
 
-class CheckerError(RuntimeError):
-    pass
-
-
 class Checker(Protocol):
     name: str
     tier: CheckerTier
@@ -80,6 +76,3 @@ async def run_all(
             )
         )
     )
-
-
-FindingFactory = Callable[..., list[Finding]]

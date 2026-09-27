@@ -88,16 +88,6 @@ class CheckerResult(BaseModel):
         return self.status is CheckerStatus.OK
 
 
-class AnalyzeRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    repo: NonEmpty
-    base_sha: str = Field(min_length=7)
-    head_sha: str = Field(min_length=7)
-    diff: str = ""
-    workspace: str = "."
-
-
 class VerdictRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

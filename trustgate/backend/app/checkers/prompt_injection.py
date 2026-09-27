@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.checkers.semantic import SemanticChecker
 from app.llm.client import Provider
-from app.schemas import CheckerTier
 
 FOCUS = """
 Prompt injection and instruction-hierarchy violations. Look for: user-controlled or
@@ -22,6 +21,4 @@ with no such boundary, is.
 
 
 def build(provider: Provider, max_diff_bytes: int) -> SemanticChecker:
-    checker = SemanticChecker("prompt_injection", FOCUS, provider, max_diff_bytes)
-    checker.tier = CheckerTier.SEMANTIC
-    return checker
+    return SemanticChecker("prompt_injection", FOCUS, provider, max_diff_bytes)

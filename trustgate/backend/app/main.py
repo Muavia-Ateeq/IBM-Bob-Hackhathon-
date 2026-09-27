@@ -15,15 +15,31 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from app.adjudicator import SEVERITY_ORDER, adjudicate
-from app.checkers import authz, business, injection, prompt_injection, secrets
+from app.checkers import (
+    authz,
+    business,
+    injection,
+    prompt_injection,
+    secrets,
+    security_reviewer,
+    spec_conformance,
+)
 from app.checkers.base import Checker, run_all
-from app.config import Settings, load_settings
+from app.config import Settings, __version__, load_settings
 from app.llm.client import Provider, UnavailableProvider, build_provider
 from app.runlog import DEFAULT_RUNS_DIR, compute_verdict, load_all_records, write_run_records
 from app.sarif import write_sarif
 from app.schemas import CheckerResult, CheckerStatus, Verdict
 
-CHECKER_MODULES = (secrets, authz, injection, prompt_injection, business)
+CHECKER_MODULES = (
+    secrets,
+    authz,
+    injection,
+    prompt_injection,
+    business,
+    security_reviewer,
+    spec_conformance,
+)
 
 
 def _log(message: str) -> None:
@@ -102,7 +118,10 @@ async def analyze(
         return 2
 
     if isinstance(provider, UnavailableProvider):
-        print("GROQ_API_KEY is not set. Every semantic checker will degrade to REVIEW.", file=sys.stderr)
+        print(
+            f"{provider.reason}. Every semantic checker will degrade to REVIEW.",
+            file=sys.stderr,
+        )
 
     roster = build_roster(provider, settings.max_diff_bytes)
     _log(f"Starting {len(roster)} checkers in parallel for PR: {pr}")
@@ -131,7 +150,7 @@ def build_app(runs_dir: Path = DEFAULT_RUNS_DIR):
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
 
-    application = FastAPI(title="TrustGate", version="0.1.0")
+    application = FastAPI(title="TrustGate", version=__version__)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

@@ -163,6 +163,37 @@ def test_a_clean_case_is_clean_and_a_dirty_one_is_a_false_positive():
     assert tallies["secrets"].false_positives == 1
 
 
+def test_the_bench_roster_is_the_engine_roster() -> None:
+    """`bench/run_benchmark.py` once carried a hand-copied tuple of checker names.
+
+    A checker added to `app.main.CHECKER_MODULES` and forgotten there scored zero for the
+    whole benchmark while every printed number still looked like a measurement — the exact
+    fail-open this project exists to not ship. The bench now derives its roster from the
+    engine; this test is the guard that keeps the two honest about each other.
+    """
+    from app.llm.client import UnavailableProvider
+    from app.main import build_roster
+
+    engine_names = {checker.name for checker in build_roster(UnavailableProvider("test"), 1000)}
+    assert set(rb.CHECKERS) == engine_names
+    assert len(rb.CHECKERS) == len(set(rb.CHECKERS)), "a checker name is listed twice"
+    assert len(rb.CHECKERS) == len(engine_names), "a checker module builds to a duplicate name"
+
+
+def test_every_bench_checker_is_in_the_corpus_ground_truth_or_is_known() -> None:
+    """A checker with no case in cases.json is a checker nothing measures.
+
+    security_reviewer and spec_conformance are unmeasured today. That is recorded here
+    rather than left implicit, so the roster and the corpus cannot drift apart unnoticed.
+    """
+    corpus = rb.load_corpus(BENCH / "cases.json")
+    named = {case.expected_checker for case in corpus.cases if case.expected_checker}
+    unmeasured = sorted(set(rb.CHECKERS) - named)
+    assert unmeasured == ["security_reviewer", "spec_conformance"], (
+        f"corpus coverage changed — a case was added or removed for {unmeasured}"
+    )
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.checkers.semantic import SemanticChecker
 from app.llm.client import Provider
-from app.schemas import CheckerTier
 
 FOCUS = """
 Injection. Look for: SQL, NoSQL, OS command and template injection; cross-site scripting where
@@ -13,6 +12,4 @@ framework in use actually neutralises the sink. A parameterised query is not SQL
 
 
 def build(provider: Provider, max_diff_bytes: int) -> SemanticChecker:
-    checker = SemanticChecker("injection", FOCUS, provider, max_diff_bytes)
-    checker.tier = CheckerTier.SEMANTIC
-    return checker
+    return SemanticChecker("injection", FOCUS, provider, max_diff_bytes)

@@ -38,6 +38,11 @@ corpus/results/
 # fragment. Anchored to backend/ so a source directory named runs/ elsewhere is still tracked.
 /trustgate/backend/runs/
 
+# The same rule for the run records Muavia committed under trustgate/runs/. Beyond the
+# credential-fragment exposure above, those 13 files asserted status "ok" for two checkers
+# whose implementation only raised NotImplementedError — a run that could not have happened.
+/trustgate/runs/
+
 # Pinned scanner binaries, fetched and checksum-verified locally, never committed.
 # A vendored 8MB executable from a third-party release is not something a source repo should
 # carry, and an unverified one is worse than none. See SYSTEM_LEDGER.md K14 for the fetch steps.

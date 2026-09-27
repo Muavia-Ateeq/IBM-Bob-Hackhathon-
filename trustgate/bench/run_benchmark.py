@@ -40,10 +40,14 @@ BENCH_DIR = REPO_ROOT / "bench"
 if str(ENGINE_DIR) not in sys.path:
     sys.path.insert(0, str(ENGINE_DIR))
 
+from app.main import CHECKER_MODULES  # noqa: E402
 from app.runlog import compute_verdict  # noqa: E402
 from app.schemas import CheckerStatus, VerdictRecord  # noqa: E402
 
-CHECKERS = ("secrets", "authz", "injection", "prompt_injection", "business")
+# The roster, read from the engine rather than copied here. This used to be a hand-maintained
+# tuple that silently fell behind `app.main.CHECKER_MODULES` — a checker added to one and
+# forgotten in the other scores zero without ever saying so.
+CHECKERS = tuple(module.__name__.rsplit(".", 1)[-1] for module in CHECKER_MODULES)
 
 
 # --------------------------------------------------------------------------

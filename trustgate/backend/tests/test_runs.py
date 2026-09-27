@@ -87,12 +87,27 @@ def test_records_are_scoped_to_their_pr(tmp_path: Path) -> None:
     assert compute_verdict("repo#1", tmp_path).verdict is Verdict.BLOCK
 
 
-def test_unreadable_file_is_reported_not_dropped(tmp_path: Path) -> None:
+def test_unreadable_file_is_counted_not_named(tmp_path: Path) -> None:
+    """A corrupt file is counted, never named.
+
+    Its filename embeds a run_id and checker name, and the verdict reason is written to the
+    PR job summary — so naming it would republish another PR's filenames. See runlog.
+    """
     write_run_records([result()], "repo#1", "r1", tmp_path)
     (tmp_path / "corrupt.json").write_text("{not json", encoding="utf-8")
     record = compute_verdict("repo#1", tmp_path)
-    assert "corrupt.json" in record.reason
+    assert "1 unattributable unreadable run file(s)" in record.reason
+    assert "corrupt.json" not in record.reason
     assert record.verdict is Verdict.PASS
+
+
+def test_unreadable_files_do_not_disclose_another_pr(tmp_path: Path) -> None:
+    """A corrupt file whose name is shaped like another PR's must not surface in this PR's reason."""
+    write_run_records([result()], "repo#1", "r1", tmp_path)
+    (tmp_path / "run_20990101_000000_secretcheck.json").write_text("{not json", encoding="utf-8")
+    record = compute_verdict("repo#1", tmp_path)
+    assert "secretcheck" not in record.reason
+    assert "1 unattributable unreadable run file(s)" in record.reason
 
 
 def test_input_hash_tracks_the_matched_records(tmp_path: Path) -> None:
@@ -108,7 +123,7 @@ def test_load_results_returns_parsed_results(tmp_path: Path) -> None:
     write_run_records([result()], "repo#1", "r1", tmp_path)
     results, unreadable, digest = load_results(tmp_path, "repo#1")
     assert [r.checker for r in results] == ["authz"]
-    assert unreadable == []
+    assert unreadable == 0
     assert digest
 
 

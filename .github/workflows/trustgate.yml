@@ -44,8 +44,8 @@ jobs:
   # is how findings vanish silently. Parallel jobs keep a red suite and a red gate independent,
   # and both are still visible on the same PR.
   #
-  # No new dependency: pytest and pytest-asyncio are already pinned in
-  # trustgate/backend/requirements.txt, so this reuses the same install the gate already does.
+  # No new dependency: pytest is already pinned in trustgate/backend/requirements.txt, so this
+  # reuses the same install the gate already does.
   # The suite is hermetic -- no test reads the network or a credential, and there is no skipif
   # anywhere in it, so it needs no secret and runs identically on a fork PR.
   tests:
@@ -139,7 +139,14 @@ jobs:
       # engine's real exit code, which `tee` swallows — and the liveness assert that uses it.
       - name: Run TrustGate
         env:
+          # Primary provider, then the fallback. Secrets by reference only -- no key value is
+          # ever written into this file. The engine degrades to REVIEW, never PASS, if neither
+          # resolves, so a missing secret is a visible failure rather than a silent pass.
+          WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          WATSONX_URL: https://us-south.ml.cloud.ibm.com
+          WATSONX_MODEL: ibm/granite-4-h-small
+          WATSONX_PROJECT_ID: ${{ vars.WATSONX_PROJECT_ID }}
           GITLEAKS_BIN: gitleaks
           # Suppress the two deliberately-planted fake secrets (.github/gitleaks.toml).
           # Scoped to this step on purpose so bench/ keeps detecting the corpus fixture.

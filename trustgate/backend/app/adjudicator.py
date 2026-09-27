@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from app.schemas import CheckerResult, CheckerStatus, Severity, Verdict
+from app.schemas import CheckerResult, Severity, Verdict
 
 SEVERITY_ORDER = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]
 
@@ -47,8 +47,5 @@ def adjudicate(results: Sequence[CheckerResult]) -> tuple[Verdict, str, list[str
             f"no findings, but {len(incomplete)} of {len(results)} checkers did not complete",
             sorted(incomplete),
         )
-
-    if any(result.status is CheckerStatus.TIMEOUT for result in results):
-        return Verdict.REVIEW, "a checker timed out", sorted(incomplete)
 
     return Verdict.PASS, "all checkers completed with no findings", []

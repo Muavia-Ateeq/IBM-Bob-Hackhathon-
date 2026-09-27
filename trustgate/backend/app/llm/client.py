@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 from app.config import Settings
 
@@ -29,6 +30,10 @@ class UnavailableProvider:
 
     def __init__(self, reason: str) -> None:
         self._reason = reason
+
+    @property
+    def reason(self) -> str:
+        return self._reason
 
     async def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> Completion:
         raise ProviderUnavailable(self._reason)
@@ -87,7 +92,79 @@ class GroqProvider:
         )
 
 
+class FallbackProvider:
+    """An ordered chain. The first provider that answers serves the request; the rest are
+    only reached if it fails.
+
+    Every failure is recorded and printed once to stderr, naming the provider and the reason.
+    If every provider fails, `ProviderUnavailable` is raised carrying all of their reasons —
+    the point of a fallback chain is that the failure is visible, not that it is hidden behind
+    whichever provider happened to be last.
+
+    `model_id` is the provider that actually served the last request, not the first one tried.
+    """
+
+    def __init__(self, providers: Sequence[Provider]) -> None:
+        self._providers = tuple(providers)
+        self._served_by: Provider | None = None
+        self.failures: list[str] = []
+
+    @property
+    def model_id(self) -> str:
+        if self._served_by is None:
+            return "unresolved"
+        return self._served_by.model_id
+
+    @property
+    def providers(self) -> tuple[Provider, ...]:
+        return self._providers
+
+    async def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> Completion:
+        if not self._providers:
+            raise ProviderUnavailable("no LLM provider is configured")
+
+        self.failures = []
+        for provider in self._providers:
+            try:
+                completion = await provider.complete_json(system, user, schema)
+            except Exception as exc:
+                reason = f"{provider.model_id}: {type(exc).__name__}: {exc}"
+                self.failures.append(reason)
+                print(f"provider unavailable, trying the next one — {reason}", file=sys.stderr)
+                continue
+            self._served_by = provider
+            return completion
+
+        raise ProviderUnavailable(
+            "every configured LLM provider failed — " + "; ".join(self.failures)
+        )
+
+
 def build_provider(settings: Settings) -> Provider:
-    if not settings.groq_api_key:
-        return UnavailableProvider("GROQ_API_KEY is not set")
-    return GroqProvider(settings.groq_api_key, settings.model_id)
+    """IBM watsonx.ai first, Groq second. Order is the product decision, not a default."""
+    from app.llm.watsonx_client import WatsonxProvider
+
+    chain: list[Provider] = []
+
+    if settings.watsonx_api_key:
+        try:
+            chain.append(
+                WatsonxProvider(
+                    api_key=settings.watsonx_api_key,
+                    model_id=settings.watsonx_model_id,
+                    url=settings.watsonx_url,
+                    project_id=settings.watsonx_project_id,
+                    space_id=settings.watsonx_space_id,
+                )
+            )
+        except ProviderUnavailable as exc:
+            print(f"watsonx.ai is not usable: {exc}", file=sys.stderr)
+
+    if settings.groq_api_key:
+        chain.append(GroqProvider(settings.groq_api_key, settings.model_id))
+
+    if not chain:
+        return UnavailableProvider(
+            "neither WATSONX_API_KEY nor GROQ_API_KEY is set"
+        )
+    return FallbackProvider(chain)
