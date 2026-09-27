@@ -10,6 +10,10 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 from app.adjudicator import SEVERITY_ORDER, adjudicate
 from app.checkers import authz, business, injection, secrets
 from app.checkers.base import Checker, run_all

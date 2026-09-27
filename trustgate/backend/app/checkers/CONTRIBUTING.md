@@ -84,10 +84,11 @@ fans out over them with `asyncio.gather`. Adding a checker does not touch either
 ## Testing it
 
 ```bash
-cd backend
+cd trustgate/backend
 python -m pytest tests/ -q
 python app/main.py --diff <some>.diff --pr test/1
 ```
 
 A checker that degrades on every run is a checker that does not run. If you cannot exercise
-yours here, say so in `docs/SYSTEM_LEDGER.md` rather than reporting a number you did not measure.
+yours here, say so in `trustgate/docs/SYSTEM_LEDGER.md` rather than reporting a number you did
+not measure.

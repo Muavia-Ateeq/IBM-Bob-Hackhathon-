@@ -226,6 +226,13 @@ def run_case(corpus: Corpus, case: Case, workdir: Path) -> CaseResult:
         env=env,
         capture_output=True,
         text=True,
+        # The child is told to write utf-8 above, so the parent must read utf-8 too.
+        # text=True alone decodes with the locale encoding, which is cp1252 on
+        # Windows: the reader thread dies on the first non-cp1252 byte and stdout/
+        # stderr come back short — so the Traceback check below can miss a real
+        # crash and score it as a verdict.
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     # Exit 1 is BLOCK, but an unhandled traceback also exits 1. Distinguishing
@@ -256,6 +263,17 @@ def matches(case: Case, finding: dict, tolerance: int) -> bool:
     return abs(int(finding["line"]) - case.expected_line) <= tolerance
 
 
+def _count_fp(tallies: dict[str, Tally], finding: dict) -> None:
+    """Charge a finding to its own checker as a false positive.
+
+    Deliberately not called before the match test: a finding that satisfies the
+    case is a true positive, and counting it here as well scored a checker that
+    found the planted defect exactly right at precision 0.50. The bug was
+    invisible while every case was degraded and no case ever reached this code.
+    """
+    tallies.setdefault(finding["checker"], Tally()).false_positives += 1
+
+
 def mark_checkers(tallies: dict[str, Tally], results: list[CaseResult]) -> None:
     """A checker is MEASURED only if it completed OK on every case.
 
@@ -284,16 +302,30 @@ def score(corpus: Corpus, results: list[CaseResult], tallies: dict[str, Tally]) 
         # either. Scoring "no findings" from a run where nothing completed as a
         # false negative is the same fail-open one level up from the per-checker
         # rule, and it is worse: it looks like a measurement.
-        if result.record.degraded:
+        #
+        # Only the checkers that can change THIS case's score disqualify it. A
+        # matching finding from the expected checker is a true positive whoever
+        # else was down, so three unrelated LLM checkers being unavailable must not
+        # cost the one checker that can run today its only measurable result. A
+        # case that expects clean is the opposite: any checker at all could have
+        # raised the false positive being ruled out, so one degraded checker is
+        # enough to disqualify it. Per-checker MEASURED status is decided
+        # separately, in mark_checkers, and still refuses a rate for any checker
+        # that errored on any case.
+        blocking = (
+            list(result.record.degraded_checkers)
+            if case.expects_clean
+            else [n for n in result.record.degraded_checkers if n == case.expected_checker]
+        )
+        if blocking:
             result.outcome = "degraded"
-            missing = ", ".join(result.record.degraded_checkers) or "unknown"
+            missing = ", ".join(blocking) or "unknown"
             result.note = f"run degraded ({missing}) - not scored"
             continue
 
-        for finding in result.findings:
-            tallies.setdefault(finding["checker"], Tally()).false_positives += 1
-
         if case.expects_clean:
+            for finding in result.findings:
+                _count_fp(tallies, finding)
             result.outcome = "fp" if result.findings else "clean"
             result.note = (
                 f"false positive - {case.no_checker_reason or 'no checker owns this'}"
@@ -302,11 +334,14 @@ def score(corpus: Corpus, results: list[CaseResult], tallies: dict[str, Tally]) 
             )
             continue
 
-        if case.expected_checker is None:
-            continue
-
         tally = tallies.setdefault(case.expected_checker, Tally())
-        if any(matches(case, f, corpus.line_tolerance) for f in result.findings):
+        matched = False
+        for finding in result.findings:
+            if not matched and matches(case, finding, corpus.line_tolerance):
+                matched = True
+            else:
+                _count_fp(tallies, finding)
+        if matched:
             tally.true_positives += 1
             result.outcome = "tp"
         else:
