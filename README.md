@@ -116,7 +116,7 @@ through a deterministic adjudicator into one verdict with cited evidence.
      │  (Tier 2)  security_rev LLM             semantic
      │  (Tier 2)  spec_conform LLM             semantic
      ├────────────────┤
-     │  (Tier 1)  secrets      Gitleaks        BUILT, unrun
+     │  (Tier 1)  secrets      Gitleaks        BUILT, RUNS
      │  (Tier 1)  deps         OSV-Scanner     NOT BUILT
      └───────┬────────┘
              │  validated findings, each with file + line + quote
@@ -333,7 +333,7 @@ checker design, are in [`trustgate/docs/AI_CONTEXT.md`](trustgate/docs/AI_CONTEX
 | `trustgate/backend/app/` | Verdict engine — schemas, adjudicator, checkers, LLM client, run log, SARIF, CLI |
 | `trustgate/backend/app/comment.py` | Renders a verdict as a pull-request comment and posts it. Runs locally, not from the gate — see the note in its header |
 | `trustgate/backend/integration_test.py` | Four-check smoke test: API health, run records, verdict endpoint, gate invariants |
-| `trustgate/backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, integration, prompt-injection, and benchmark-scoring tests — **108 passing** (`cd trustgate/backend && python -m pytest tests/ -q`), and a `tests` job runs them in CI (that job has not executed yet) |
+| `trustgate/backend/tests/` | Adjudicator, schema, run-log, secrets, semantic, SARIF, gate, comment, integration, prompt-injection, providers, and benchmark-scoring tests — **110 passing** (`cd trustgate/backend && python -m pytest tests/ -q`), and a `tests` job runs them in CI (that job has not executed yet) |
 | `dashboard/` | React · Vite · TypeScript UI, merged from PR #2 — **built, not deployed** |
 | `trustgate/backend/samples/` | A runnable example diff carrying an injection, an authz gap, and a hardcoded key |
 | `trustgate/backend/requirements.txt` | The pinned installed set |

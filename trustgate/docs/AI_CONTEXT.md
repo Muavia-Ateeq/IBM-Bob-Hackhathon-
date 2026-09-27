@@ -17,7 +17,7 @@
 | **Domain** | Application security — pre-merge pull request risk gating |
 | **Core Purpose** | Run security checkers in parallel against a pull request diff, merge their findings through a deterministic adjudicator, and emit one verdict — `PASS`, `REVIEW`, or `BLOCK` — with cited evidence |
 | **Version** | `__version__ = "0.1.0"` in `backend/app/config.py`, single source of truth. It is what the FastAPI app title reports *and* what `sarif.py` writes to `tool.driver.version`. Previously SARIF emitted a hardcoded `"0.0.0"` on every upload ever made — that is fixed, and a second hardcoded version string is a defect |
-| **Status** | Engine core built and tested, runnable from the CLI. All seven checkers exist; none has produced a real finding yet. The SARIF converter, the GitHub gate, the PR-comment formatter, and a four-check smoke test are built but **have never run live** — no workflow execution, no accepted upload, no comment posted. The dashboard is built. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
+| **Status** | Engine core built and tested, runnable from the CLI. All seven checkers exist; `secrets` has produced a real `BLOCK` against the planted `issue-02-hardcoded-key` fixture (n=1). The six semantic checkers have never run against a live model. The GitHub gate **has executed — twice, both `failure`** (ledger K20); the SARIF upload step ran under `if: always()`, acceptance unconfirmed. No PR comment has been posted. The dashboard is built but not deployed. See `README.md` for the current build state and `SYSTEM_LEDGER.md` for what is unverified. |
 
 ### Naming constraints (verified, not hypothetical)
 
@@ -72,12 +72,13 @@ Consequences, binding on this project:
 | SARIF 2.1.0 | Native GitHub Code Scanning format. Findings render inline on the diff |
 | `github/codeql-action/upload-sarif` | Uploads findings. Requires `security-events: write` permission |
 
-**State: written and unit-tested, never executed on GitHub.** `tests/test_gate.py` pins the
+**State: built, unit-tested, and executed on GitHub — twice, both `failure` (K20).**
+`tests/test_gate.py` pins the
 BLOCK-grep pattern against the CLI's own output so a format change cannot silently disable
 blocking, and `tests/test_sarif.py` validates the report against both the OASIS schema and
-GitHub's stricter required table. What is *not* verified: that the workflow runs at all, and
-that Code Scanning accepts the upload. UNVERIFIED — pushing any branch and reading the Actions
-tab is what verifies it.
+GitHub's stricter required table. What is *not* verified: that Code Scanning accepts the
+upload, and that any run since the `a04438b` allowlist fix is green. UNVERIFIED — opening a
+pull request and reading the Actions tab is what verifies that.
 
 ### Deterministic scanners (checker tier 1)
 
@@ -97,7 +98,7 @@ tab is what verifies it.
 ```
 /                                    # REPO ROOT — read by path from here, so it cannot move:
 ├── AGENTS.md                  #   pointer to trustgate/docs/AGENTS.md, for root-loading tools
-├── .github/workflows/trustgate.yml  # the gate — written, NEVER RUN (ledger K20)
+├── .github/workflows/trustgate.yml  # the gate — HAS RUN, twice, both failure (ledger K20)
 ├── .github/gitleaks.toml      #   gate-only allowlist; outside the scan target on purpose (3a)
 ├── render.yaml                 # Render blueprint — the API is live at https://trustgate-api-ehib.onrender.com; VERIFIED 2026-09-27, /api/health returned {"ok":true}
 ├── Procfile                    #   same start command, for any Procfile host
@@ -123,7 +124,7 @@ tab is what verifies it.
     │   │   ├── checkers/          # One module per checker. See roster below.
     │   │   │   ├── base.py        # Checker protocol, timeout, asyncio.gather fan-out
     │   │   │   ├── semantic.py    # The shared Tier 2 LLM checker
-    │   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT, never run
+    │   │   │   ├── secrets.py     # Tier 1 — Gitleaks wrapper — BUILT AND RUN; produces a real BLOCK (K14)
     │   │   │   ├── authz.py       # Tier 2 — LLM
     │   │   │   ├── injection.py   # Tier 2 — LLM
     │   │   │   ├── prompt_injection.py # Tier 2 — LLM
@@ -143,12 +144,12 @@ tab is what verifies it.
     │   ├── tests/                 # 110 passing across 11 files
     │   ├── requirements.txt       # Pinned installed set
     │   └── pyproject.toml         — NOT BUILT
-    ├── demo_target/           # Labelled corpus — BUILT, never run against a live checker
+    ├── demo_target/           # Labelled corpus — BUILT; secrets checker measured against it (n=1)
     │   ├── base/                  # The clean app every fixture is a one-defect copy of
-    │   └── issue-NN-*/            # 10 planted defects; 2 have no owning checker, 2 are disputed
+    │   └── issue-NN-*/            # 9 planted defects (issue-05 unplanted); 2 have no owning checker, 2 are disputed
     ├── bench/                 # Ground truth + the measurement runner
     │   ├── cases.json             # Pydantic-validated; expected_checker is null where none owns it
-    │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 + K14 close
+    │   └── run_benchmark.py       # Reuses the shipped CLI. INCOMPLETE until K12 closes (K14 is closed)
 ```
 
 `dashboard/` sits at the **repo root**, not under `trustgate/`: React/Vite/TypeScript, integrated
@@ -180,7 +181,7 @@ fragment of a real credential. It is demo-only until it is gated. See `CONTRACT.
 | 3 | `injection` | 2 | SQL/command injection, XSS, SSRF, unsafe deserialization | LLM |
 | 4 | `prompt_injection` | 2 | Untrusted text concatenated into a model instruction; agent-directed repo content | LLM |
 | 5 | `business` | 2 | Business-logic flaws, race conditions, crypto misuse, validation gaps | LLM |
-| 6 | `security_reviewer` | 2 | Broad security review pass over the diff — secrets, injection, missing auth, unsafe deserialization | LLM |
+| 6 | `security_reviewer` | 2 | Debug/verbose mode left enabled in production config. Narrow by design — explicitly **excludes** secrets, injection, authz, deserialization and crypto, which other checkers own | LLM |
 | 7 | `spec_conformance` | 2 | Code measured against the product requirements themselves (password hashing, rate limiting, no hardcoded keys, no debug mode) | LLM |
 
 `security_reviewer` and `spec_conformance` were implemented by M. Muavia from his IBM Bob
