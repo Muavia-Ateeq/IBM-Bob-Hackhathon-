@@ -1,20 +1,32 @@
 """
 Spec-Conformance checker — M. Muavia
-Implements the Checker protocol from backend/app/checkers/base.py
+Wired to SemanticChecker using the same pattern as the existing checkers.
 
-Step A prompt: docs/prompt_agent02_step_A_spec_conformance.md
-Step B prompt: docs/prompt_agent02_step_B_spec_conformance.md
+Prompt focus: docs/muavia_prompts/prompt_agent02_step_A/B_spec_conformance.md
 """
 from __future__ import annotations
-from app.schemas import CheckerTier, Finding
+
+from app.checkers.semantic import SemanticChecker
+from app.llm.client import Provider
+from app.schemas import CheckerTier
+
+FOCUS = """
+Spec conformance. You will review code against these product requirements:
+- Passwords must be hashed with a strong algorithm (bcrypt or PBKDF2). MD5, SHA1, or any
+  unsalted hash is a violation.
+- All login and sensitive endpoints must implement rate limiting. An endpoint with no
+  throttling or failed-attempt counting is a violation.
+- API keys and secrets must not be hardcoded in source. They must be loaded from environment
+  variables or a secrets manager.
+- Debug mode must not be enabled in production configuration files.
+
+For each violation, report the exact file and line where the requirement is broken, quote
+the offending line verbatim as evidence, and state which requirement is violated.
+Only report clear, unambiguous violations — not missing features or aspirational requirements.
+""".strip()
 
 
-class SpecConformanceChecker:
-    name: str = "spec_conformance"
-    tier: CheckerTier = CheckerTier.SEMANTIC
-
-    async def run(self, diff: str, workspace: str) -> list[Finding]:
-        raise NotImplementedError(
-            "Wire Step A + Step B Bob subagent calls here. "
-            "Prompts: docs/prompt_agent02_step_A/B_spec_conformance.md"
-        )
+def build(provider: Provider, max_diff_bytes: int) -> SemanticChecker:
+    checker = SemanticChecker("spec_conformance", FOCUS, provider, max_diff_bytes)
+    checker.tier = CheckerTier.SEMANTIC
+    return checker

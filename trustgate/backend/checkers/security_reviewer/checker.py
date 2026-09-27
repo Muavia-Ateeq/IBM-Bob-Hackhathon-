@@ -1,19 +1,34 @@
 """
 Security Reviewer checker — M. Muavia
-Implements the Checker protocol from backend/app/checkers/base.py
+Wired to SemanticChecker using the same pattern as the existing checkers.
 
-Prompt: docs/prompt_agent01_security_reviewer.md
+Prompt focus: docs/muavia_prompts/prompt_agent01_security_reviewer.md
 """
 from __future__ import annotations
-from app.schemas import CheckerTier, Finding
+
+from app.checkers.semantic import SemanticChecker
+from app.llm.client import Provider
+from app.schemas import CheckerTier
+
+FOCUS = """
+Security review. Look for:
+1. HARDCODED SECRETS: API keys, passwords, tokens, or credentials written directly in source
+   code instead of loaded from environment variables or a secrets manager.
+2. SQL INJECTION: SQL queries built using string concatenation or f-strings with variables
+   that come from user input, instead of parameterized queries.
+3. MISSING AUTH: An endpoint that performs sensitive actions (admin actions, data modification,
+   access to another user's data) with no visible authentication or authorization check.
+4. UNSAFE DESERIALIZATION: Use of pickle.loads, yaml.load (without SafeLoader), eval, or exec
+   on data that originates from a request or external input.
+5. DEBUG MODE IN PRODUCTION: Configuration that leaves debug mode, verbose error pages, or
+   development flags enabled in a production config file.
+
+Only report issues that fall into one of these five categories. Do not report style,
+naming, or architecture opinions.
+""".strip()
 
 
-class SecurityReviewerChecker:
-    name: str = "security_reviewer"
-    tier: CheckerTier = CheckerTier.SEMANTIC
-
-    async def run(self, diff: str, workspace: str) -> list[Finding]:
-        raise NotImplementedError(
-            "Wire Bob subagent call here. "
-            "Prompt: docs/prompt_agent01_security_reviewer.md"
-        )
+def build(provider: Provider, max_diff_bytes: int) -> SemanticChecker:
+    checker = SemanticChecker("security_reviewer", FOCUS, provider, max_diff_bytes)
+    checker.tier = CheckerTier.SEMANTIC
+    return checker
