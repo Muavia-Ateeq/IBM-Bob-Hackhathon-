@@ -97,11 +97,22 @@ def compute_verdict(pr: str, runs_dir: Path | str = DEFAULT_RUNS_DIR) -> Verdict
 
     if unreadable:
         reason = f"{reason}; {unreadable} unattributable unreadable run file(s)"
+        if verdict is Verdict.PASS:
+            # Fail-closed. A file we cannot parse is a checker whose result is unaccounted
+            # for, which is the same condition adjudicate() refuses to PASS on. This is not
+            # hypothetical: `write_run_records` writes one file per checker with no atomic
+            # rename, so a killed process leaves a truncated record, and the readable ones
+            # still look perfectly clean. Reporting the count in the reason is not enough --
+            # the gate's final step greps for BLOCK, so a PASS merges the PR. The file stays
+            # unnamed above: a corrupt record cannot say which PR it was, and its filename
+            # would republish another PR's run_id and checker name into the job summary.
+            verdict = Verdict.REVIEW
+            reason = f"a checker result could not be read, so the run is not verified; {reason}"
 
     return VerdictRecord(
         verdict=verdict,
         reason=reason,
-        degraded=bool(degraded_checkers) or not results,
+        degraded=bool(degraded_checkers) or bool(unreadable) or not results,
         degraded_checkers=degraded_checkers,
         findings=[finding for result in results for finding in result.findings],
         results=results,

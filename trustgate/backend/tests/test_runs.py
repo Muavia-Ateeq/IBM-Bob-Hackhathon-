@@ -98,7 +98,33 @@ def test_unreadable_file_is_counted_not_named(tmp_path: Path) -> None:
     record = compute_verdict("repo#1", tmp_path)
     assert "1 unattributable unreadable run file(s)" in record.reason
     assert "corrupt.json" not in record.reason
-    assert record.verdict is Verdict.PASS
+    assert record.verdict is Verdict.REVIEW, "an unreadable checker result is an unaccounted result"
+    assert record.degraded is True
+
+
+def test_a_corrupt_run_file_never_yields_pass(tmp_path: Path) -> None:
+    """The fail-closed invariant, on the path that had no test.
+
+    `write_run_records` writes one file per checker with no atomic rename, so a killed
+    process leaves a truncated record. The readable records still adjudicate clean, so
+    before this was fixed the verdict came back PASS and the gate's `grep -q BLOCK` let the
+    PR merge -- with one checker's result silently missing.
+    """
+    write_run_records([result(), result("injection"), result("business")], "repo#1", "r1", tmp_path)
+    assert compute_verdict("repo#1", tmp_path).verdict is Verdict.PASS
+
+    (tmp_path / "r1_authz.json").write_text('{"run_id": "r1", "pr": "repo#1", "res', encoding="utf-8")
+    record = compute_verdict("repo#1", tmp_path)
+
+    assert record.verdict is Verdict.REVIEW
+    assert record.degraded is True
+    assert "could not be read" in record.reason
+
+
+def test_a_corrupt_run_file_does_not_downgrade_a_block(tmp_path: Path) -> None:
+    write_run_records([result(findings=[finding()])], "repo#1", "r1", tmp_path)
+    (tmp_path / "corrupt.json").write_text("{not json", encoding="utf-8")
+    assert compute_verdict("repo#1", tmp_path).verdict is Verdict.BLOCK
 
 
 def test_unreadable_files_do_not_disclose_another_pr(tmp_path: Path) -> None:

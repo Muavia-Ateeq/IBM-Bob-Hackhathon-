@@ -89,14 +89,68 @@ def _settings(**overrides) -> Settings:
     return replace(load_settings(), **overrides)
 
 
-def test_build_provider_orders_ibm_before_groq() -> None:
-    settings = _settings(
-        groq_api_key="g", watsonx_api_key="w", watsonx_model_id="ibm-model", model_id="groq-model"
+def test_build_provider_orders_ibm_before_groq(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The order is the product decision, so it is asserted on a chain that really has two.
+
+    Without stubbing, a project-less configuration drops IBM and the assertion would hold on a
+    one-element list — a test that passes while proving nothing. `build_provider` imports
+    WatsonxProvider inside the function, so patching the module attribute is what it reads.
+    """
+    import app.llm.watsonx_client as watsonx
+
+    class _StubWatsonx:
+        def __init__(self, api_key: str, model_id: str, url: str, project_id=None, space_id=None) -> None:
+            self.model_id = model_id
+
+    monkeypatch.setattr(watsonx, "WatsonxProvider", _StubWatsonx)
+
+    chain = build_provider(
+        _settings(
+            groq_api_key="g",
+            watsonx_api_key="w",
+            watsonx_model_id="ibm-model",
+            model_id="groq-model",
+            watsonx_project_id="proj",
+        )
     )
-    chain = build_provider(settings)
     assert isinstance(chain, FallbackProvider)
-    ids = [provider.model_id for provider in chain.providers]
-    assert ids == sorted(ids, key=lambda m: 0 if m == settings.watsonx_model_id else 1)
+    assert [p.model_id for p in chain.providers] == ["ibm-model", "groq-model"]
+
+
+def test_a_rejected_ibm_key_falls_through_to_groq_instead_of_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: `ModelInference(...)` authenticates against IAM in its constructor.
+
+    An invalid key raises `InvalidCredentialsError`, which is NOT a ProviderUnavailable, so
+    before the translation in `WatsonxProvider.__init__` it escaped `build_provider` entirely
+    and killed the whole run — a bad IBM key took down the gate instead of falling back to the
+    provider that exists to cover for exactly that. Observed live: the SDK's real error is
+    `BXNIM0415E Provided API key could not be found.`
+    """
+    import ibm_watsonx_ai.foundation_models as foundation_models
+
+    class _InvalidCredentialsError(Exception):
+        pass
+
+    def _reject(*args, **kwargs):
+        raise _InvalidCredentialsError("BXNIM0415E Provided API key could not be found.")
+
+    monkeypatch.setattr(foundation_models, "ModelInference", _reject)
+
+    chain = build_provider(
+        _settings(
+            groq_api_key="g",
+            watsonx_api_key="bad",
+            watsonx_project_id="proj",
+            watsonx_model_id="ibm-model",
+            model_id="groq-model",
+        )
+    )
+    assert isinstance(chain, FallbackProvider)
+    assert [p.model_id for p in chain.providers] == ["groq-model"], (
+        "a rejected IBM credential must leave Groq serving, not abort the run"
+    )
 
 
 def test_build_provider_with_no_keys_is_unavailable_not_a_fake_provider() -> None:
@@ -109,15 +163,15 @@ def test_build_provider_with_no_keys_is_unavailable_not_a_fake_provider() -> Non
 def test_ibm_without_project_or_space_is_reported_not_silently_half_configured() -> None:
     """watsonx.ai scopes a request to a project or a space; with neither, the SDK call is
     meaningless, so the chain drops IBM and says why rather than failing on the first request."""
-    chain = build_provider(
-        _settings(
-            groq_api_key="g",
-            watsonx_api_key="w",
-            watsonx_project_id=None,
-            watsonx_space_id=None,
-        )
+    settings = _settings(
+        groq_api_key="g",
+        watsonx_api_key="w",
+        watsonx_project_id=None,
+        watsonx_space_id=None,
+        model_id="groq-model",
     )
-    assert [p.model_id for p in chain.providers] == ["openai/gpt-oss-120b"]
+    chain = build_provider(settings)
+    assert [p.model_id for p in chain.providers] == ["groq-model"]
 
 
 def test_unavailable_provider_raises_rather_than_returning_empty() -> None:
